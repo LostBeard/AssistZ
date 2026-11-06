@@ -81,6 +81,30 @@ ESC-50 sounds most called gunfire: fireworks 82%, a fair call. Thunderstorm 10% 
 
 **Labels fixed, whole-gun folds (`Lab/open_cv.py`), not a test.** Each of 47 guns takes a turn as never trained on (43 of them have gunshot clips, 1,417 shots), false alarms from held-out kinds of sound. -6 and -24 dB: shots called gunfire 85.7% and 84.3%, false gunfire 0.46% and 0.36%, false gas strike 0.17%, false infected attack 0. Silenced shots 81% and 71%, echoes alone 62% and 64%. Shots missed go mostly to explosion (shotguns and heavy rifles) and to no name. Worst guns: PB6P9, mp133, Saiga12, R12, rossim92, SVD. All clean samples: real game mixes are next.
 
+**Real game mixes never trained on (`Lab/open_replay.py`, then `Lab/phase_gates7.py`): the candidate is NOT ready and is not shipped.** Pages still serves the old probe, b64ee1b. `open_replay.py` reads embeddings already in each run's replay, so no new recording is needed. It writes tags `_open` and `_ow10`, `_ow30`, `_ow100`, outside the repo in `Lab/runs`. Weights in `L:/AssistZLabWork/bank/open_all<tag>.npz`.
+
+| Weight of each lab recording against a clean sample | 3 | 10 | 30 | 100 | Shipped probe |
+|---|---|---|---|---|---|
+| Unseen guns' clean shots called gunfire, -6 dB | 85.7 | 75.9 | 54.8 | 33.5 | |
+| The same, -24 dB | 84.3 | 72.9 | 47.6 | 25.5 | |
+| False gunfire, clean, -6 dB | 0.46 | 0.26 | 0.17 | 0.09 | |
+| Real gunfire in a rain storm, of 103 | 64 | 91 | 91 | 94 | 92 |
+| Real gunfire in a dry storm, of 118 | 114 | 116 | 116 | 116 | 116 |
+| Real gunfire in rain, of 127 | 111 | 123 | 125 | 127 | 126 |
+| False gunshots in Nasdara attacks, of 265 | 2 | 5 | 5 | 5 | 10 |
+| False gas or heli in the fresh dry storm, of 238 | 13 | 12 | 11 | 11 | 31 |
+
+**So a weight alone cannot do it:** the more the lab's recordings count, the better on the guns they contain and the worse on guns they do not, and TJ's mod guns are the second kind. At every weight these also miss: Chernarus dry storm thunder about 75% (limit 80, shipped 76.5); natural attacks 87% (shipped 95.3) and rain attacks 87-88% (shipped 93.3), both beyond "no more than 3 points worse", with the difference mostly in no name and `other`.
+
+Not yet run on this candidate: `Lab/own_gate.py`, `Lab/far_gate.py`, `Lab/gun_gate.py`, `Lab/distance_shipped.py`, ESC-50 after the label fix. No app code has changed for the new classes. These old holdouts have now been read several times to compare weights, so they are worn: a final pass needs fresh recordings.
+
+**Next, in this order.**
+1. Teach the clean samples what the game does to them: mix bank clips with real rain, wind and storm beds cut from lab recordings between events, at several levels, before embedding (`Lab/bank_embed.py`), and train on those, with lab weight about 3. This is untested: it is my best explanation, since rain-covered gunfire falling to no name is what failed.
+2. Read `Lab/open_cv.py` and the real-mix table above again. It must hold both: unseen guns and rain.
+3. Workshop weapon mods: none on this PC. Get some on the second account, embed locally, the written new test above, never trained on. Also a creature mod like the dinosaurs TJ heard.
+4. `SoundLabeler` and `SoundMarks` for the new classes: below the bar says nothing rather than falling to CLAP's word; footsteps and the other new names stay list only until tested with direction. Export JSON from `open_all`.
+5. Other gate scripts, fresh recordings, driven run doing what players do, deploy, TJ plays.
+
 "Essentially give you Cortana in DayZ": as helpful as ML can get using just the video and audio streams, and a test of SpawnDev.ILGPU.ML. She can't control you, fight for you or look around corners, but she is smart, helpful, tracks what matters and gives as much useful information as possible. In the browser, sleek and unobtrusive. An ML showcase, not an accessibility tool (TJ's direction, handoff).
 
 ## The goal, in TJ's words (2026-11-05)
