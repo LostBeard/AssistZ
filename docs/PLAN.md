@@ -377,9 +377,27 @@ This is a choice of what to test, not a result. It is three runs, on the CPU, se
 - **Not tested.** The map: `M` did not open it, and a player needs it in hand; those frames were just the game view. The loading screen: YOLOv8n boxed a figure on it at 0.88 on an earlier run, and it comes before the driver starts. Other menus, such as gestures and crafting, and other interface scales.
 - **The crawl key is still wrong.** With X (scan 0x2D) a "crawl" moved at 3.0 to 3.5 m/s, a jog, as it did with Z, with one reading of 7.1. So it has not gone prone. Crawling is still untested.
 
+### Which way the player is moving: first look (2026-11-06, not a test)
+
+Item 2 above. Python on the driven runs' frames (`Lab/motion_look.py`, `Lab/motion_score.py`; see37, see39, see40, 1,080 pairs half a second apart, truth from the pose log, speed along the view): block-match three bands of a 400 x 225 picture, 2 px steps. Walking forward the picture expands and the ground slides down; a turn shifts it all sideways.
+
+| View not turning | Right | Wrong | No call |
+|---|---|---|---|
+| Moving or still: says moving when moving (any band shifted 4+ px) | 100% of 631 | | |
+| The same, on still pairs | | 12% of 130 | |
+| Forward at walking speed, from the ground's direction | 86% of 145 | 2% | 12% |
+| Backward, slow | 80% of 144 | 0% | 20% |
+| Backward, fast | 67% of 159 | 3% | 30% |
+| **Forward at sprint** | **25% of 173** | **42%** | 33% |
+
+- **"Not moving" looks within reach,** which is what TJ's "not moving, so those steps are not yours" needs, and the walking directions look usable. While the view turns, the ground's up and down motion stays quiet on still pairs (1% of 149).
+- **Sprinting fails.** The head bobs, and half a second is a long gap at 3.3 m/s. The app sees every frame, about 30 a second, where this saw 2, so this may be the method's gap and not its limit.
+- The 12% false "moving" on still pairs is not looked at yet; a walking infected in a band is one candidate.
+- Next here: frames at a video rate, limits written first, in the app on the GPU. It would use the same frames `YawTracker` already has, so it may cost little.
+
 **Next, in order:**
 1. Once Tuvok has the fixes: D-FINE-S's speed on the RX 590 with capture, then its own limits on fresh runs, still, moving and live, with its bars and K written first, and at least 12 live slots.
-2. Video items 2 and 3 in the plan's order: which way the player is moving, then own shots.
+2. Which way the player is moving, at video rate; then own shots.
 3. The map and the loading screen, and the crawl key.
 
 The truth was wrong twice before these numbers, and both times the detector looked worse than it was. Checking boxes by eye found both. The nearest of all infected was not the placed one (fixed in the log). And the picture is a flat projection: the column is `800 + 840 tan(angle)` at 1600 wide, not 14.67 px per degree, and the view is about 87 degrees across (plus or minus 43.6), not the 109 once assumed. 8.8 px per degree at 960 holds at the centre, so small turns (`YawGate`, `YawTracker`) stand, but anything placing a box on the radar needs the tangent. The first look's tables above used the old line. `Lab/see_offset.py` shows the offsets slot by slot.
