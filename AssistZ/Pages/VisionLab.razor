@@ -1,0 +1,157 @@
+@page "/vision"
+@using AssistZ.Services
+@using SpawnDev.ILGPU.ML
+@using SpawnDev.ILGPU.ML.Hub
+@using SpawnDev.ILGPU.ML.Pipelines
+@using SpawnDev.SpawnJS
+@using SpawnDev.SpawnJS.JSObjects
+@using System.Diagnostics
+@inject SpawnJSRuntime JS
+@inject GpuHost Gpu
+@inject HttpClient Http
+
+@* Lab only: embeds survey frames with DINOv2 through the real browser path and logs each vector, for Lab/harness/vision_embed.py; with ?model=yolo, runs the library's YOLOv8 on them and logs what it finds, for Lab/harness/vision_detect.py. Not linked from the app. *@
+<PageTitle>AssistZ vision lab</PageTitle>
+<input id="az-frames" type="file" multiple accept="image/jpeg" @onchange="ChosenAsync" />
+<p id="az-status">@_status</p>
+
+@code {
+    [SupplyParameterFromQuery(Name = "model")] public string? Model { get; set; }
+    [SupplyParameterFromQuery(Name = "tiles")] public int? Tiles { get; set; }
+    [SupplyParameterFromQuery(Name = "zoom")] public int? Zoom { get; set; }
+    [SupplyParameterFromQuery(Name = "capture")] public int? Capture { get; set; }
+    string _status = "ready";
+
+    // Square tiles that leave out the HUD strip at the bottom of a 1600x900 frame. The hotbar's items differ between runs, so they must not reach the embedding.
+    const int TileSize = 790;
+    static readonly int[] TileLefts = { 0, 405, 810 };
+
+    // YOLOv8 works at 640 square: the whole 1600 wide frame shrinks by 2.5. These tiles keep native size along the horizon band, leaving out the hotbar.
+    const int YoloTile = 640;
+    const int YoloTileTop = 120;
+    static readonly int[] YoloLefts = { 0, 480, 960 };
+    const int YoloHorizon = 470;
+
+    async Task YoloAsync()
+    {
+        var acc = await Gpu.GetAcceleratorAsync();
+        var load = Stopwatch.StartNew();
+        using var source = new HubModelSource(JS, Http);
+        await using var stream = await source.OpenAsync(ModelHub.KnownModels.YOLOv8n, "yolov8n-onnx-web/yolov8n.onnx");
+        using var session = await InferenceSession.CreateFromStreamAsync(acc, stream);
+        using var yolo = new ObjectDetectionPipeline(session, acc);
+        // Replays a recorded plan: on the RX 590, 129 to 55 ms per inference, the same detections, less GPU memory.
+        yolo.EnableGraphCapture = Capture == 1;
+        Console.WriteLine($"[AssistZ] yolo loaded in {load.ElapsedMilliseconds} ms on {acc.Name}");
+        using var input = JS.Call<string, HTMLInputElement>("document.getElementById", "az-frames");
+        using var files = input.Files;
+        int n = files?.Length ?? 0;
+        for (int i = 0; i < n; i++)
+        {
+            using var file = files!.ElementAt(i);
+            string name = file.Name;
+            using var bitmap = await JS.CallAsync<File, ImageBitmap>("createImageBitmap", file);
+            int w = (int)bitmap.Width, h = (int)bitmap.Height;
+            using var canvas = new OffscreenCanvas(w, h);
+            using var ctx = canvas.Get2DContext(new CanvasRenderingContext2DSettings { WillReadFrequently = true });
+            ctx.DrawImage(bitmap, 0, 0);
+            await DetectAsync(yolo, ctx, name, "full", 0, 0, w, h);
+            if (Tiles == 1)
+                for (int t = 0; t < YoloLefts.Length; t++)
+                    await DetectAsync(yolo, ctx, name, $"tile{t}", YoloLefts[t], YoloTileTop, YoloTile, YoloTile);
+            // Magnified tiles along the horizon, overlapping by a quarter: past about 30 m an infected is under 40 px tall at native size, and half hidden by grass.
+            if (Zoom is int side && side > 0)
+            {
+                int top = YoloHorizon - side / 2, step = side * 3 / 4;
+                for (int t = 0, left = 0; left < w; t++, left += step)
+                {
+                    int at = Math.Min(left, w - side);
+                    await DetectAsync(yolo, ctx, name, $"zoom{t}", at, top, side, side);
+                    if (at + side >= w)
+                        break;
+                }
+            }
+            bitmap.Close();
+            if (i % 50 == 0)
+            {
+                _status = $"{i + 1} of {n}";
+                StateHasChanged();
+                await Task.Yield();
+            }
+        }
+        Console.WriteLine($"[AssistZ] yolo capture: {yolo.CaptureStatus}");
+        Console.WriteLine($"[AssistZ] yolo done frames={n}");
+    }
+
+    static async Task DetectAsync(ObjectDetectionPipeline yolo, CanvasRenderingContext2D ctx, string name, string kind, int x, int y, int w, int h)
+    {
+        var clock = Stopwatch.StartNew();
+        using var image = ctx.GetImageData(x, y, w, h);
+        using var data = image.Data;
+        var r = await yolo.DetectAsync(data, w, h, confidenceThreshold: 0.1f);
+        double ms = clock.Elapsed.TotalMilliseconds;
+        // Boxes in the whole frame's pixels. A label can hold a space, so underscores.
+        string found = string.Join(";", r.Objects.Select(o => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{o.Label.Replace(' ', '_')}:{o.Confidence:0.000}:{o.X + x:0}:{o.Y + y:0}:{o.Width:0}:{o.Height:0}")));
+        Console.WriteLine($"[AssistZ] yolo file={name} kind={kind} ms={ms:0.0} found={found}");
+    }
+
+    async Task ChosenAsync(ChangeEventArgs _)
+    {
+        try
+        {
+            if (Model == "yolo")
+            {
+                await YoloAsync();
+                return;
+            }
+            var acc = await Gpu.GetAcceleratorAsync();
+            string repo = Model == "small" ? Dinov2EmbeddingPipeline.SmallRepo : Dinov2EmbeddingPipeline.BaseRepo;
+            var load = Stopwatch.StartNew();
+            using var dino = await Dinov2EmbeddingPipeline.CreateFromHubAsync(acc, new HubModelSource(JS, Http), repo);
+            Console.WriteLine($"[AssistZ] dino loaded {repo} dim={dino.Dim} in {load.ElapsedMilliseconds} ms on {acc.Name}");
+            using var input = JS.Call<string, HTMLInputElement>("document.getElementById", "az-frames");
+            using var files = input.Files;
+            int n = files?.Length ?? 0;
+            for (int i = 0; i < n; i++)
+            {
+                using var file = files!.ElementAt(i);
+                string name = file.Name;
+                using var bitmap = await JS.CallAsync<File, ImageBitmap>("createImageBitmap", file);
+                int w = (int)bitmap.Width, h = (int)bitmap.Height;
+                using var canvas = new OffscreenCanvas(w, h);
+                using var ctx = canvas.Get2DContext(new CanvasRenderingContext2DSettings { WillReadFrequently = true });
+                ctx.DrawImage(bitmap, 0, 0);
+                // The whole frame, as the app would hand it over: the pipeline's own centre crop applies.
+                await EmbedAsync(dino, ctx, name, "center", 0, 0, w, h);
+                if (Tiles == 1)
+                    for (int t = 0; t < TileLefts.Length; t++)
+                        await EmbedAsync(dino, ctx, name, $"tile{t}", TileLefts[t], 0, TileSize, TileSize);
+                bitmap.Close();
+                if (i % 50 == 0)
+                {
+                    _status = $"{i + 1} of {n}";
+                    StateHasChanged();
+                    await Task.Yield();
+                }
+            }
+            Console.WriteLine($"[AssistZ] dino done frames={n}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AssistZ] dino failed {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"[AssistZ] yolo failed {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    static async Task EmbedAsync(Dinov2EmbeddingPipeline dino, CanvasRenderingContext2D ctx, string name, string kind, int x, int y, int w, int h)
+    {
+        var clock = Stopwatch.StartNew();
+        using var image = ctx.GetImageData(x, y, w, h);
+        using var data = image.Data;
+        var e = await dino.EmbedAsync(data, w, h, includeTokens: false);
+        double ms = clock.Elapsed.TotalMilliseconds;
+        var bytes = new byte[e.Pooled.Length * sizeof(float)];
+        Buffer.BlockCopy(e.Pooled, 0, bytes, 0, bytes.Length);
+        Console.WriteLine($"[AssistZ] dino file={name} kind={kind} ms={ms:0.0} v={Convert.ToBase64String(bytes)}");
+    }
+}

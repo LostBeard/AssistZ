@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure-logic tests (no browser, no GPU): the sources under test are compiled in directly so the tests do not need
+       the Blazor WebAssembly runtime. GPU/browser behaviour is verified by the Lab harness (Lab/README.md). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\AssistZ\Audio\SourceTracker.cs" Link="Under test\SourceTracker.cs" />
+    <Compile Include="..\AssistZ\Services\GameProfile.cs" Link="Under test\GameProfile.cs" />
+    <Compile Include="..\AssistZ\Audio\CadenceMeter.cs" Link="Under test\CadenceMeter.cs" />
+    <Compile Include="..\AssistZ\Audio\StereoFrame.cs" Link="Under test\StereoFrame.cs" />
+    <Compile Include="..\AssistZ\Audio\SoundEventDetector.cs" Link="Under test\SoundEventDetector.cs" />
+    <Compile Include="..\AssistZ\Audio\BurstVote.cs" Link="Under test\BurstVote.cs" />
+    <Compile Include="..\AssistZ\Audio\DistanceProbe.cs" Link="Under test\DistanceProbe.cs" />
+    <Compile Include="..\AssistZ\Video\YawGate.cs" Link="Under test\YawGate.cs" />
+    <Compile Include="..\AssistZ\Audio\AudioGapMeter.cs" Link="Under test\AudioGapMeter.cs" />
+    <Compile Include="..\AssistZ\Audio\SoundMarks.cs" Link="Under test\SoundMarks.cs" />
+    <Compile Include="..\AssistZ\Audio\GunProbe.cs" Link="Under test\GunProbe.cs" />
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.4.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

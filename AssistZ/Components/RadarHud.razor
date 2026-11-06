@@ -1,0 +1,138 @@
+@using AssistZ.Audio
+@using AssistZ.Services
+@using System.Globalization
+
+@*
+    The tracker: a Halo style radar centred on the player, front = up (docs/PLAN.md). Each sound heard pings as its own icon, coloured by threat level, at its distance when one was measured. The inner ring is 100 m, the outer 800 m: near shots spread out inside the inner ring, far ones sit between the two. A sound with no measured distance sits on the outer ring: no distance is invented. A sound not named yet is a dim arc there. Stereo cannot separate front from back, so a mark shows at its front azimuth and, faintly, at its mirror behind, until the view turning collapses the pair to one. A burst is many events on one spot: the newest stands for them. Sized by its container, so the same markup serves the in-page corner HUD and the PiP window.
+*@
+<div class="hud">
+    <svg class="hud-radar" viewBox="-60 -60 120 120" aria-label="Sound direction">
+        <circle r="50" class="hud-ring" />
+        <circle r="30" class="hud-ring hud-ring-inner" />
+        <line x1="0" y1="-54" x2="0" y2="-46" class="hud-north" />
+        <circle r="1.6" class="hud-self" />
+        <text x="1.5" y="-31" class="hud-scale">100</text>
+        <text x="1.5" y="-51" class="hud-scale">800</text>
+        @foreach (var m in Marks())
+        {
+            @if (m.Mark == null)
+            {
+                <path d="@Arc(m.Azimuth, m.Size)" class="hud-event hud-pending" style="opacity:@F(m.Alpha)" />
+            }
+            else
+            {
+                var (x, y) = Polar(m.Azimuth, RingRadius * m.Radius);
+                <SoundIcon Icon="@m.Icon" Level="@m.Level" Measured="@m.Mark.Measured" X="@x" Y="@y" Alpha="@m.Alpha" Ghost="@m.Ghost" />
+            }
+        }
+        @if (Session.LastStereo is StereoFrame s && s.Rms > 1e-4f)
+        {
+            var (x, y) = Polar(s.PanAzimuthDegrees, 26);
+            <line x1="0" y1="0" x2="@F(x)" y2="@F(y)" class="hud-needle" style="opacity:@F(Math.Clamp((20 * Math.Log10(s.Rms) + 60) / 50, 0.15, 1))" />
+        }
+    </svg>
+    <ol class="hud-events">
+        @foreach (var (ev, alpha) in Recent().Reverse().Take(4))
+        {
+            <li style="opacity:@F(0.35 + 0.65 * alpha)">
+                @if (ev.Label != null)
+                {
+                    var mark = SoundMarks.For(ev.Label);
+                    <span class="hud-what @(mark != null ? "lvl-" + SoundMarks.LevelOf(mark, ev.DistanceMeters, ev.GunFamily).ToString().ToLowerInvariant() : "")" title="@F0(ev.LabelProbability * 100)% (CLAP's own word: @ev.ClapLabel)">@SoundMarks.NameWithGun(ev.Label, ev.GunName, ev.GunFamily)</span>
+                }
+                <span class="hud-dir">@Label(ev)</span>
+                <span class="hud-num">@Reading(ev)</span>
+            </li>
+        }
+    </ol>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public CaptureSession Session { get; set; } = default!;
+
+    static readonly TimeSpan Life = TimeSpan.FromSeconds(5);
+    const double RingRadius = 50;
+
+    readonly record struct Drawn(SoundMark? Mark, string Icon, ThreatLevel Level, double Azimuth, double Radius, double Alpha, double Size, bool Ghost);
+
+    // Newest first, so the newest of a spot stands for it. The solid marks merge among themselves, and so do their mirrors.
+    List<Drawn> Marks()
+    {
+        var solid = new List<Drawn>();
+        var ghosts = new List<Drawn>();
+        foreach (var (ev, alpha) in Recent().Reverse())
+        {
+            if (SoundMarks.IsAmbient(ev.Label)) continue;
+            var mark = SoundMarks.For(ev.Label);
+            if (ev.Label != null && mark == null) continue;
+            // World-anchored: since the event the view turned by (now - then), so the sound is that much the other way.
+            double turned = Session.ViewYawDegrees - ev.ViewYawAtEvent;
+            double front = ev.CalibratedAzimuth - turned;
+            double behind = 180 - ev.CalibratedAzimuth - turned;
+            double size = 3 + Math.Clamp(ev.RiseDb, 0, 40) / 12;
+            double radius = ev.DistanceMeters is double metres ? DistanceProbe.RadarFraction(metres) : 1;
+            var side = Session.SideOf(ev.TrackId);
+            // Resolved tracks draw only their side; unresolved ones show the front reading and its faint mirror behind.
+            var level = mark != null ? SoundMarks.LevelOf(mark, ev.DistanceMeters, ev.GunFamily) : ThreatLevel.Info;
+            string icon = mark != null ? SoundMarks.IconOf(mark, ev.GunFamily) : "";
+            solid.Add(new Drawn(mark, icon, level, side == SourceSide.Back ? behind : front, radius, alpha, size, false));
+            if (side == SourceSide.Unknown && mark != null) ghosts.Add(new Drawn(mark, icon, level, behind, radius, alpha * 0.35, size, true));
+        }
+        var drawn = new List<Drawn>();
+        foreach (var list in new[] { ghosts, solid })
+        {
+            var keep = SoundMarks.Keep(list.Select(d => (d.Icon, d.Azimuth, d.Radius)).ToList());
+            // The oldest first, so the newest ends up on top.
+            for (int i = keep.Count - 1; i >= 0; i--) drawn.Add(list[keep[i]]);
+        }
+        return drawn;
+    }
+
+    static string Reading(SoundEvent ev) => ev.DistanceMeters is double m ? DistanceProbe.Describe(m) : $"{F0(ev.LevelDb)} dB";
+
+    IEnumerable<(SoundEvent ev, double alpha)> Recent()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var e in Session.Events)
+        {
+            double age = (now - e.Time).TotalSeconds;
+            if (age < Life.TotalSeconds) yield return (e, 1 - age / Life.TotalSeconds);
+        }
+    }
+
+    // Azimuth degrees, 0 = ahead (up), clockwise.
+    static (double x, double y) Polar(double azimuthDegrees, double r)
+    {
+        double a = azimuthDegrees * Math.PI / 180;
+        return (r * Math.Sin(a), -r * Math.Cos(a));
+    }
+
+    // A short arc on the ring, half-width in degrees grows with the onset's rise.
+    static string Arc(double azimuthDegrees, double halfWidth)
+    {
+        var (x0, y0) = Polar(azimuthDegrees - halfWidth * 2, 50);
+        var (x1, y1) = Polar(azimuthDegrees + halfWidth * 2, 50);
+        return $"M {F(x0)} {F(y0)} A 50 50 0 0 1 {F(x1)} {F(y1)}";
+    }
+
+    string Label(SoundEvent ev)
+    {
+        double turned = Session.ViewYawDegrees - ev.ViewYawAtEvent;
+        return Session.SideOf(ev.TrackId) switch
+        {
+            SourceSide.Back => Direction(180 - ev.CalibratedAzimuth - turned),
+            SourceSide.Front => Direction(ev.CalibratedAzimuth - turned),
+            _ => Direction(ev.CalibratedAzimuth - turned) + " ?",
+        };
+    }
+
+    static string Direction(double az)
+    {
+        az = ((az + 180) % 360 + 360) % 360 - 180;   // -180..180
+        if (Math.Abs(az) < 7.5) return "ahead";
+        if (Math.Abs(az) > 172.5) return "behind";
+        return $"{F0(Math.Abs(az))}° {(az < 0 ? "L" : "R")}";
+    }
+    static string F(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+    static string F0(double v) => v.ToString("0", CultureInfo.InvariantCulture);
+}

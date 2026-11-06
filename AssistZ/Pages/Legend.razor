@@ -1,0 +1,49 @@
+@page "/icons"
+@using AssistZ.Audio
+@using AssistZ.Components
+
+<PageTitle>AssistZ radar icons</PageTitle>
+
+@* The radar's icons at the size they really appear, and larger, so they can be judged. Levels are a first cut for TJ to change. *@
+<div class="legend">
+    <h1>Radar icons</h1>
+    <p>Colour says how bad, the icon says what. A dashed outline means the name has never been tested against the game.</p>
+    <div class="legend-levels">
+        @foreach (var level in Enum.GetValues<ThreatLevel>().Reverse())
+        {
+            <span class="legend-level lvl-@level.ToString().ToLowerInvariant()">@level</span>
+        }
+    </div>
+    <table>
+        <tr><th>At radar size</th><th>Enlarged</th><th>Sound</th><th>Level</th><th>Tested</th></tr>
+        @foreach (var row in Rows())
+        {
+            <tr>
+                <td><svg viewBox="-10 -10 20 20" style="width:19px;height:19px"><SoundIcon Icon="@row.Icon" Level="@row.Level" Measured="@row.Measured" Scale="1" /></svg></td>
+                <td><svg viewBox="-10 -10 20 20" style="width:56px;height:56px"><SoundIcon Icon="@row.Icon" Level="@row.Level" Measured="@row.Measured" Scale="1" /></svg></td>
+                <td>@row.Title</td>
+                <td class="lvl-@row.Level.ToString().ToLowerInvariant() legend-word">@row.Level</td>
+                <td>@(row.Measured ? "yes" : "no")</td>
+            </tr>
+        }
+    </table>
+</div>
+
+@code {
+    IEnumerable<SoundMark> Rows()
+    {
+        foreach (var m in SoundMarks.All.OrderByDescending(m => m.Level))
+        {
+            yield return m;
+            if (m.Icon == "shot")
+            {
+                yield return new SoundMark("gun-sniper", ThreatLevel.High, true, "Sniper rifle, or SVD, Winchester: stays High at any range");
+                yield return new SoundMark("gun-assault", ThreatLevel.High, true, "Assault rifle, or AKM, AUG, M4A1: Medium past 300 m");
+                yield return new SoundMark("gun-smg", ThreatLevel.High, true, "SMG: Medium past 300 m");
+                yield return new SoundMark("gun-pistol", ThreatLevel.High, true, "Pistol, or CZ75, FNX45: Medium past 300 m");
+            }
+            // Drawn ready for the day it can be heard, which is not yet: chase and fight sound alike so far.
+            if (m.Icon == "infected-agro") yield return new SoundMark("infected-attack", ThreatLevel.High, false, "Infected, attacking (not heard yet: drawn only)");
+        }
+    }
+}

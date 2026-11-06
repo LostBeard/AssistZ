@@ -1,0 +1,106 @@
+@page "/testsignal"
+@using SpawnDev.SpawnJS.JSObjects
+@using System.Globalization
+@implements IDisposable
+
+<PageTitle>AssistZ Test Signal</PageTitle>
+
+@*
+    Ground truth for the audio path: share THIS tab (with audio) from the main page and every pulse should land on the
+    radar at its known azimuth. StereoPannerNode pans a mono source with the constant-power law
+    (L = cos(x pi/2), R = sin(x pi/2), x = (pan + 1) / 2), which is exactly the model StereoFrame.PanAzimuthDegrees
+    inverts, so pan p must read back as p * 90 degrees.
+*@
+
+<header class="topbar">
+    <span class="brand">AssistZ Test Signal</span>
+    @if (_ctx == null)
+    {
+        <button class="btn primary" @onclick="Start">Play pulses</button>
+    }
+    else
+    {
+        <button class="btn" @onclick="Stop">Stop</button>
+    }
+    <span class="muted">Pulses cycle through pan -1, -0.5, 0, 0.5, 1 (expected azimuth -90, -45, 0, 45, 90).</span>
+</header>
+<main style="padding:16px">
+    <section>
+        <h2>Now playing</h2>
+        <p style="font-size:2rem; margin:0">pan @F(_currentPan) = @F(_currentPan * 90) deg</p>
+        <div style="height:4rem; position:relative; background:#000">
+            <div style="position:absolute; top:0; bottom:0; width:10%; background:var(--accent); left:@F((_currentPan + 1) / 2 * 90)%"></div>
+        </div>
+    </section>
+</main>
+
+@code {
+    public static readonly float[] Pans = { -1f, -0.5f, 0f, 0.5f, 1f };
+    public const double PulseInterval = 0.6, PulseLength = 0.06;
+
+    AudioContext? _ctx;
+    Timer? _timer;
+    double _nextTime;
+    int _next;
+    float _currentPan;
+    readonly Queue<(double time, float pan)> _scheduled = new();
+
+    void Start()
+    {
+        _ctx = new AudioContext();
+        _nextTime = _ctx.CurrentTime + 0.3;
+        _next = 0;
+        Schedule();
+        _timer = new Timer(_ => InvokeAsync(Schedule), null, 200, 200);
+    }
+
+    // Keeps ~1.5 s of pulses scheduled ahead on the audio clock.
+    void Schedule()
+    {
+        if (_ctx == null) return;
+        double now = _ctx.CurrentTime;
+        while (_nextTime < now + 1.5)
+        {
+            float pan = Pans[_next % Pans.Length];
+            using var osc = _ctx.CreateOscillator();
+            using var gain = _ctx.CreateGain();
+            using var panner = _ctx.CreateStereoPanner();
+            osc.Type = OscillatorType.Square;
+            using (var f = osc.Frequency) f.Value = 440;
+            using (var g = gain.Gain)
+            {
+                g.SetValueAtTime(0f, 0).Dispose();
+                g.SetValueAtTime(0.5f, _nextTime).Dispose();
+                g.SetValueAtTime(0f, _nextTime + PulseLength).Dispose();
+            }
+            using (var p = panner.Pan) p.Value = pan;
+            using var destination = _ctx.Destination;
+            osc.Connect(gain).Dispose();
+            gain.Connect(panner).Dispose();
+            panner.Connect(destination).Dispose();
+            osc.Start(_nextTime);
+            osc.Stop(_nextTime + PulseLength + 0.01);
+            _scheduled.Enqueue((_nextTime, pan));
+            _nextTime += PulseInterval;
+            _next++;
+        }
+        // The pulse sounding now, or the last one that sounded.
+        while (_scheduled.Count > 1 && _scheduled.Peek().time <= now && _scheduled.ElementAt(1).time <= now) _scheduled.Dequeue();
+        if (_scheduled.Count > 0 && _scheduled.Peek().time <= now) _currentPan = _scheduled.Peek().pan;
+        StateHasChanged();
+    }
+
+    void Stop()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        if (_ctx != null) _ = _ctx.Close();
+        _ctx?.Dispose();
+        _scheduled.Clear();
+        _ctx = null;
+    }
+
+    static string F(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    public void Dispose() => Stop();
+}

@@ -1,0 +1,34 @@
+@using AssistZ.Audio
+@using System.Globalization
+
+@* One radar icon: a dark disc so it reads on any game picture, its shape, its colour for the threat level. A dashed disc means the name was never tested. Sits inside an svg. *@
+<g class="@Classes" transform="translate(@F(X) @F(Y)) scale(@F(Scale))" style="opacity:@F(Alpha)">
+    <circle r="9.5" class="hud-disc" />
+    @if (!string.IsNullOrEmpty(_paths.Line))
+    {
+        <path d="@_paths.Line" class="hud-line" />
+    }
+    @if (!string.IsNullOrEmpty(_paths.Fill))
+    {
+        <path d="@_paths.Fill" class="hud-fill" fill-rule="evenodd" />
+    }
+</g>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    [Parameter] public ThreatLevel Level { get; set; }
+    [Parameter] public bool Measured { get; set; } = true;
+    [Parameter] public double X { get; set; }
+    [Parameter] public double Y { get; set; }
+    [Parameter] public double Scale { get; set; } = 0.62;
+    [Parameter] public double Alpha { get; set; } = 1;
+    [Parameter] public bool Ghost { get; set; }
+
+    (string Line, string Fill) _paths;
+
+    protected override void OnParametersSet() => _paths = SoundMarks.Icons.TryGetValue(Icon, out var p) ? p : ("", "");
+
+    string Classes => $"hud-mark lvl-{Level.ToString().ToLowerInvariant()}{(Measured ? "" : " hud-unmeasured")}{(Ghost ? " hud-ghost-mark" : "")}";
+
+    static string F(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
+}

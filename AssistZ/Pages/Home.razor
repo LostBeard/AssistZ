@@ -1,0 +1,228 @@
+﻿@page "/"
+@using AssistZ.Audio
+@using AssistZ.Components
+@using AssistZ.Services
+@using SpawnDev.SpawnJS
+@using SpawnDev.SpawnJS.JSObjects
+@using System.Globalization
+@inject SpawnJSRuntime JS
+@inject CaptureSession Session
+@inject OverlayWindow Overlay
+@inject GpuHost Gpu
+@implements IDisposable
+
+<PageTitle>AssistZ</PageTitle>
+
+<div class="app">
+    <header class="topbar">
+        <span class="brand">AssistZ</span>
+        <span class="status @(Session.Running ? "live" : "")">
+            <i></i>@(Session.Running ? Session.SourceName ?? "Live" : "Idle")
+        </span>
+        <span class="spacer"></span>
+        <label class="field">
+            Game
+            <select @bind="ProfileName" title="Calibration measured for this game">
+                @foreach (var p in GameProfile.All)
+                {
+                    <option value="@p.Name">@p.Name</option>
+                }
+            </select>
+        </label>
+        <label class="field">
+            Vision
+            <select @bind="Fps" title="Video frames analysed per second">
+                <option value="5">5 fps</option>
+                <option value="10">10 fps</option>
+                <option value="30">30 fps</option>
+                <option value="60">60 fps</option>
+            </select>
+        </label>
+        <button class="btn @(Labeler.State == LabelerState.Ready ? "on" : "")" @onclick="LoadLabelsAsync"
+                disabled="@(Labeler.State is LabelerState.Loading or LabelerState.Ready)"
+                title="Name each sound with CLAP on your GPU (620 MB download the first time, cached)">
+            @(Labeler.State switch
+            {
+                LabelerState.Ready => "Naming sounds",
+                LabelerState.Loading => Labeler.Status ?? "Loading",
+                _ => "Name sounds",
+            })
+        </button>
+        @if (Session.Running)
+        {
+            @if (OverlayWindow.Supported)
+            {
+                <button class="btn" @onclick="ToggleOverlay">@(Overlay.IsOpen ? "Dock HUD" : "Pop out HUD")</button>
+            }
+            <button class="btn" @onclick="StopAsync">Stop</button>
+        }
+        else
+        {
+            <button class="btn" @onclick="OpenFile" title="Analyse a local video file">Open recording</button>
+            <button class="btn primary" @onclick="ShareAsync" title="A game window, or a tab playing a stream">Share window or tab</button>
+        }
+        <input id="az-file" type="file" accept="video/*" hidden @onchange="FileChosenAsync" />
+    </header>
+
+    <div class="workspace">
+        <section class="stage">
+            <canvas id="az-preview" class="@(Session.Running ? "" : "hidden")"></canvas>
+            @if (!Session.Running)
+            {
+                <div class="empty">
+                    <p>Share a game window, a Twitch / YouTube tab, or open a recording.</p>
+                    <p class="muted">Audio and video are analysed on your GPU with SpawnDev.ILGPU. Nothing leaves the browser.</p>
+                </div>
+            }
+            <div id="az-hud-home" class="hud-home">
+                <div id="az-hud">
+                    <RadarHud Session="Session" />
+                </div>
+            </div>
+            @if (Session.Error != null)
+            {
+                <div class="toast">@Session.Error</div>
+            }
+        </section>
+
+        <aside class="telemetry">
+            @{ var st = Session.Stats; var lv = Session.LastStereo; }
+            <h3>Video</h3>
+            <dl>
+                <dt>Source</dt><dd>@Dash(st.VideoWidth > 0 ? $"{st.VideoWidth}x{st.VideoHeight}" : null)</dd>
+                <dt>Analysed</dt><dd>@st.VideoFramesProcessed / @st.VideoFramesSeen</dd>
+                <dt>Frame to GPU</dt><dd>@Ms(st.LastVideoMs)</dd>
+                <dt>View turn</dt><dd>@(Session.LastYaw is null ? "-" : $"{F(Session.YawRateDegrees)}°/s")</dd>
+                <dt>Heading</dt><dd>@(Session.LastYaw is null ? "-" : $"{F(Session.ViewYawDegrees)}°")</dd>
+                <dt>Match</dt><dd>@(Session.LastYaw is AssistZ.Video.YawSample y ? F(y.Score) : "-")</dd>
+            </dl>
+            <h3>Audio</h3>
+            <dl>
+                <dt>Stream</dt><dd>@Dash(st.AudioSampleRate > 0 ? $"{st.AudioSampleRate / 1000:0.#} kHz · {st.AudioChannels} ch" : null)</dd>
+                <dt>Windows</dt><dd>@F(st.Seconds > 0 ? st.Windows / st.Seconds : 0)/s</dd>
+                <dt>Skipped</dt><dd>@st.SkippedWindows</dd>
+                <dt>Audio lost</dt><dd>@F(st.AudioLostSeconds) s</dd>
+                <dt>GPU pass</dt><dd>@Ms(st.LastAnalysisMs)</dd>
+                <dt>Level L/R</dt><dd>@(lv is StereoFrame a ? $"{Db(a.RmsLeft)} / {Db(a.RmsRight)}" : "-")</dd>
+                <dt>ILD</dt><dd>@(lv is StereoFrame b ? $"{F(b.LevelDifferenceDb)} dB" : "-")</dd>
+                <dt>ITD</dt><dd>@(lv is StereoFrame c ? $"{c.BestLagSamples} smp" : "-")</dd>
+                <dt>Spectral az</dt><dd>@(lv is StereoFrame d ? $"{F(d.SpectralAzimuthDegrees)}°" : "-")</dd>
+                <dt>Brightness</dt><dd>@(lv is StereoFrame e ? F(e.SpectralCentroid * 100) + "%" : "-")</dd>
+            </dl>
+            <h3>Events</h3>
+            <dl>
+                <dt>Onsets</dt><dd>@Session.Events.Count</dd>
+                <dt>CLAP</dt><dd>@(Labeler.State switch { LabelerState.Ready => Ms(Labeler.LastMs), LabelerState.Loading => "loading", LabelerState.Failed => "failed", _ => "off" })</dd>
+                <dt>Named</dt><dd>@Labeler.Classified@(Session.LabelsDropped > 0 ? $" ({Session.LabelsDropped} skipped)" : "")</dd>
+            </dl>
+            @if (Labeler.State == LabelerState.Failed)
+            {
+                <p class="muted">@Labeler.Status</p>
+            }
+        </aside>
+    </div>
+</div>
+
+@code {
+    Timer? _timer;
+
+    string ProfileName
+    {
+        get => Session.Profile.Name;
+        set => Session.Profile = GameProfile.All.First(p => p.Name == value);
+    }
+
+    double Fps
+    {
+        get => Session.TargetFps;
+        set => Session.TargetFps = value;
+    }
+
+    [SupplyParameterFromQuery(Name = "lab")] public int? Lab { get; set; }
+    [SupplyParameterFromQuery(Name = "spectral")] public int? Spectral { get; set; }
+    [SupplyParameterFromQuery(Name = "clap")] public string? Clap { get; set; }
+    [SupplyParameterFromQuery(Name = "warm")] public int? Warm { get; set; }
+    [SupplyParameterFromQuery(Name = "align")] public int? Align { get; set; }
+    [SupplyParameterFromQuery(Name = "embed")] public int? Embed { get; set; }
+    [SupplyParameterFromQuery(Name = "memlog")] public int? MemLogQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "capture")] public int? Capture { get; set; }
+    [SupplyParameterFromQuery(Name = "yield")] public int? Yield { get; set; }
+    [SupplyParameterFromQuery(Name = "audiobuf")] public int? AudioBuf { get; set; }
+    [SupplyParameterFromQuery(Name = "norm")] public int? Norm { get; set; }
+    [SupplyParameterFromQuery(Name = "probe")] public int? Probe { get; set; }
+    [SupplyParameterFromQuery(Name = "replay")] public int? Replay { get; set; }
+    [SupplyParameterFromQuery(Name = "skip")] public int? Skip { get; set; }
+
+    SoundLabeler Labeler => Session.Labeler;
+
+    async Task LoadLabelsAsync() => await Labeler.LoadAsync(await Gpu.GetAcceleratorAsync());
+
+    protected override void OnInitialized()
+    {
+        Labeler.Changed += OnChanged;
+        Session.LabLogging = Lab == 1;
+        Session.MemLog = MemLogQuery == 1;
+        Session.GunfireYieldsToThunder = Yield != 0;
+        if (AudioBuf != null) Session.AudioBufferChunks = AudioBuf == 0 ? null : AudioBuf;
+        if (MemLogQuery == 1) SpawnDev.ILGPU.WebGPU.WebGPUBufferAccounting.CaptureCreationSites = true;
+        Session.SpectralEnabled = Spectral != 0;
+        Session.WarmUp = Warm != 0;
+        Labeler.AnchorOnPeak = Align != 0;
+        Labeler.KeepEmbedding = Embed == 1;
+        Labeler.UseAudioCapture = Capture == 1;
+        Labeler.NormalizePeakDb = Norm;
+        Labeler.UseProbe = Probe != 0;
+        if (Clap == "larger" && Labeler.State == LabelerState.Off) Labeler.Repo = SpawnDev.ILGPU.ML.Pipelines.ClapAudioClassifier.LargerGeneralRepo;
+        Session.Changed += OnChanged;
+        Overlay.Changed += OnChanged;
+        _timer = new Timer(_ => { if (Session.Running) InvokeAsync(StateHasChanged); }, null, 100, 100);
+    }
+
+    void OnChanged() => InvokeAsync(StateHasChanged);
+
+    const string PreviewCanvasId = "az-preview";
+
+    Task ShareAsync() => Session.StartDisplayAsync(PreviewCanvasId);
+
+    void OpenFile()
+    {
+        using var input = JS.Call<string, HTMLInputElement>("document.getElementById", "az-file");
+        input.Value = "";
+        input.Click();
+    }
+
+    async Task FileChosenAsync(ChangeEventArgs _)
+    {
+        using var input = JS.Call<string, HTMLInputElement>("document.getElementById", "az-file");
+        using var files = input.Files;
+        using var file = files?.FirstOrDefault();
+        if (file == null) return;
+        if (Replay == 1) await Session.ReplayAsync(file, Skip ?? 0);
+        else await Session.StartRecordingAsync(file, PreviewCanvasId);
+    }
+
+    async Task StopAsync()
+    {
+        Overlay.Close();
+        await Session.StopAsync();
+    }
+
+    async Task ToggleOverlay()
+    {
+        if (Overlay.IsOpen) Overlay.Close();
+        else await Overlay.OpenAsync("az-hud", "az-hud-home", 260, 300);
+    }
+
+    static string F(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+    static string Ms(double v) => v > 0 ? $"{v.ToString("0.0", CultureInfo.InvariantCulture)} ms" : "-";
+    static string Dash(string? v) => v ?? "-";
+    static string Db(float rms) => rms > 1e-9f ? F(20 * Math.Log10(rms)) : "-inf";
+
+    public void Dispose()
+    {
+        Session.Changed -= OnChanged;
+        Overlay.Changed -= OnChanged;
+        Labeler.Changed -= OnChanged;
+        _timer?.Dispose();
+    }
+}

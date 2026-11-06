@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="AssistZ.Tests/AssistZ.Tests.csproj" />
+  <Project Path="AssistZ/AssistZ.csproj" />
+</Solution>
