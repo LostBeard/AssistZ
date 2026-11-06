@@ -29,7 +29,34 @@ And: "I played on a modded server with dinosaurs and the noise the big ones made
 1. **Open-set training from the game's own sound bank.** `Addons/sounds_*.pbo` hold the game's real samples: characters (feet by surface, swimming, rustling), environment, vehicles, AI, weapons. Read locally, as before, never committed or shipped; only fitted weights ship. Run them through the same CLAP embedding, and fit a far wider `other`, and more classes where a name would help a player. Gunfire stops being the nearest thing to every loud sound.
 2. **An "I do not know" that means "this is like nothing I have learned",** not just a low score among the known classes, which a softmax can give with confidence to something it has never heard. Measure how far a sound is from its class's training examples in embedding space, and say nothing past a bar. Rare classes (gas strike, helicopter crash) need more evidence than common ones, since being wrong about them costs far more than missing one. The bars come from the open-set test.
 3. **A false alarm test on an open set,** written first: samples held out from training, by whole folder, so new kinds of sound and not just new takes. False names per sound played, by folder and by name, with limits written first, and gas strikes and gunshots counted apart. **Sounds from outside the base game too, standing in for mods:** a Workshop mod with creatures, if one can be run, and otherwise general non-DayZ audio. Then a driven run doing what a player does: swim, walk on each surface, break sticks, open doors, eat, reload, use tools. The lab's gunfire tests must still pass.
+   **Guns it has never heard must still be gunfire (TJ: "there are mods with other waepons also but i would hope it could still tell it was gunfire when it hears them shoot").** So "I do not know" must not swallow them, and gunfire has to be learned as a kind of sound and not as a list of guns. Hold whole guns out of training, by family as well, and require they come out as gunfire, saying "Gunshot" rather than another gun's name. A real Workshop weapon mod too, if one runs here.
 4. **TJ plays it again.** That is the test that counts. Nothing is called working until TJ says so.
+
+**The baseline: what the shipped probe calls the game's own sounds.** The game's whole sound bank (`Lab/bank_clips.py`, 34,335 1 s clips from 27,681 samples, read locally), through the real CLAP path (`Lab/bank_embed.py`, 60 ms a clip on the RX 590), at -6 and -24 dB peak, scored as sounds away from centre (`Lab/bank_baseline.py`). This reproduces what TJ saw:
+
+| Sound, -6 dB | Called gunfire | Gas strike | Infected attack |
+|---|---|---|---|
+| Footsteps | 27% | 4% | 39% |
+| Body falls | 43% | 3% | 32% |
+| Melee hits | 49% | 3% | 23% |
+| Animal voices | 0% | 52% | 34% |
+| Water | 6% | 56% | 6% |
+| Doors and buildings | 20% | 41% | 4% |
+| Music and tones | 0% | 95% | 0% |
+| Player voices | 0% | 19% | 46% |
+| **Real gunshots** | **89%** | 6% | 0% |
+
+Across the non-gun sounds, 12.9% are called gunfire at -6 dB and 5.3% at -24, with a median probability of only 0.23 and 0.21: it is not sure, it just has to pick one. Real gunshots at -24 dB are found 65% of the time. These clips are clean samples, not game audio with distance and other sounds mixed in, and how often each plays in a game is not their share here.
+
+**Limits for the new probe, written before fitting.** Held out from training by whole folder: whole guns, and whole sub-folders of the rest. Every limit at both levels, -6 and -24 dB:
+- False gunfire on sounds that are not gunfire: at most 1% (now 12.9%, 5.3%).
+- False gas strike, on everything else: at most 1%.
+- False infected attack on sounds that are not infected: at most 2%.
+- Real gunshots from guns never trained on, called gunfire: at least 85% at -6 dB, 70% at -24 (shipped, with those guns' sounds unheard: 89%, 65%).
+- Sounds from outside the game, standing in for mods: false gunfire and false gas strike each at most 2% on a public set, ESC-50 (local only, CC BY-NC).
+- The lab's own tests still pass on the replays: gunfire in the far and near runs, agitated infected, own movement.
+- Reported, no limit: how many sounds end up unnamed. Saying nothing is allowed, and it has a cost.
+Then the driven run doing what players do, and then TJ plays it.
 
 "Essentially give you Cortana in DayZ": as helpful as ML can get using just the video and audio streams, and a test of SpawnDev.ILGPU.ML. She can't control you, fight for you or look around corners, but she is smart, helpful, tracks what matters and gives as much useful information as possible. In the browser, sleek and unobtrusive. An ML showcase, not an accessibility tool (TJ's direction, handoff).
 

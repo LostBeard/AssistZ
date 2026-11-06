@@ -27,6 +27,7 @@
     [SupplyParameterFromQuery(Name = "input")] public int? InputSize { get; set; }
     [SupplyParameterFromQuery(Name = "person")] public int? PersonClass { get; set; }
     [SupplyParameterFromQuery(Name = "opt")] public int? Optimise { get; set; }
+    [SupplyParameterFromQuery(Name = "levels")] public string? Levels { get; set; }
     string _status = "ready";
 
     // Square tiles that leave out the HUD strip at the bottom of a 1600x900 frame. The hotbar's items differ between runs, so they must not reach the embedding.
@@ -198,6 +199,57 @@
         Console.WriteLine($"[AssistZ] yolo file={name} kind={kind} ms={ms:0.0} found={string.Join(";", found)}");
     }
 
+    SpawnDev.ILGPU.ML.Pipelines.ClapAudioClassifier? _bankClap;
+    readonly string[] _bankPrompts = AssistZ.Audio.SoundLabeler.Labels.Select(l => AssistZ.Audio.SoundLabeler.Template + l).ToArray();
+
+    // Each 1 s clip of the game's sound bank, at each peak level asked for, through the same call the app makes for a sound: its embedding as base64 on the console, for Lab/bank_embed.py. Level matters to CLAP (a 12 dB shift changed names on an earlier test), and a game plays a sound at any level.
+    async Task BankAsync()
+    {
+        var acc = await Gpu.GetAcceleratorAsync();
+        if (_bankClap == null)
+        {
+            var load = Stopwatch.StartNew();
+            var source = new HubModelSource(JS, Http);
+            _bankClap = await SpawnDev.ILGPU.ML.Pipelines.ClapAudioClassifier.CreateFromHubAsync(acc, source, SpawnDev.ILGPU.ML.Pipelines.ClapAudioClassifier.DefaultRepo, (_, _) => { });
+            await _bankClap.ClassifyAsync(new float[AssistZ.Audio.SoundLabeler.ClipSamples], _bankPrompts);
+            Console.WriteLine($"[AssistZ] bank loaded {load.ElapsedMilliseconds} ms on {acc.Name}");
+        }
+        float[] levels = (Levels ?? "-6,-24").Split(',').Select(s => float.Parse(s, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        using var picker = JS.Call<string, HTMLInputElement>("document.getElementById", "az-frames");
+        using var files = picker.Files;
+        using var file = files!.ElementAt(0);
+        const int bytes = AssistZ.Audio.SoundLabeler.ClipSamples * 4;
+        long clips = (long)file.Size / bytes;
+        for (long i = 0; i < clips; i++)
+        {
+            using var slice = file.Slice(i * bytes, (i + 1) * bytes);
+            using var buffer = await slice.ArrayBuffer();
+            using var view = new Float32Array(buffer);
+            float[] pcm = view.ToArray();
+            float peak = 0;
+            foreach (float v in pcm)
+                peak = Math.Max(peak, Math.Abs(v));
+            for (int lv = 0; lv < levels.Length; lv++)
+            {
+                float gain = peak > 1e-6f ? MathF.Pow(10f, levels[lv] / 20f) / peak : 1f;
+                var scaled = new float[pcm.Length];
+                for (int s = 0; s < pcm.Length; s++)
+                    scaled[s] = pcm[s] * gain;
+                var result = await _bankClap.ClassifyWithEmbeddingAsync(scaled, _bankPrompts);
+                var raw = new byte[result.Embedding.Length * 4];
+                Buffer.BlockCopy(result.Embedding, 0, raw, 0, raw.Length);
+                Console.WriteLine($"[AssistZ] bank e {i} {lv} {Convert.ToBase64String(raw)}");
+            }
+            if (i % 100 == 0)
+            {
+                _status = $"{i + 1} of {clips}";
+                StateHasChanged();
+                await Task.Yield();
+            }
+        }
+        Console.WriteLine($"[AssistZ] bank done clips={clips}");
+    }
+
     async Task ChosenAsync(ChangeEventArgs _)
     {
         try
@@ -210,6 +262,11 @@
             if (Model == "detr")
             {
                 await DetrAsync();
+                return;
+            }
+            if (Model == "bank")
+            {
+                await BankAsync();
                 return;
             }
             var acc = await Gpu.GetAcceleratorAsync();
@@ -248,6 +305,7 @@
         {
             Console.WriteLine($"[AssistZ] dino failed {ex.GetType().Name}: {ex.Message}");
             Console.WriteLine($"[AssistZ] yolo failed {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"[AssistZ] bank failed {ex.GetType().Name}: {ex.Message}");
         }
     }
 
