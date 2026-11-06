@@ -3,6 +3,22 @@ import csv, glob, os, re
 import numpy as np
 BANK = "L:/AssistZLabWork/bank"
 LEVELS = (-6, -24)
+# A gun's own mechanism, not a shot. Their echoes (dry_tail_interior) are handling too.
+HANDLING = re.compile(r"dry|jam|reload|rld|closure|mech|charge|chamber|mag_|clip|hand_|pull|cycl|uncock|load|empty|bolt|cock|open|weapon_down|bullet|shell|arrow|string|grenate|pressure")
+
+
+def gun_part(path, name, gun):
+    """(group, gun) of a file in a gun's folder, from its name. A tail is the echo of a real shot, so it counts as one; the first rule here sent 1,300 of them to handling."""
+    folders = [x.lower() for x in path.split("/")[:-1]]
+    if "handling" in folders or HANDLING.search(name):
+        return ("gun handling", gun)
+    if "shot" in name:
+        return ("gunshot silenced" if "silenced" in name else "gunshot", gun)
+    if "tail" in name or "slapback" in name:
+        return ("gun tail", gun)
+    if re.search(r"close_?\d*\.ogg$", name):
+        return ("gun handling", gun)
+    return ("gun unclear", gun)
 
 
 def load():
@@ -20,22 +36,23 @@ def group(r):
     head = p[0].lower()
     two = "/".join(p[:2]).lower()
     if bank == "weapons":
-        if head == "firearms":
-            gun = p[1]
-            if re.search(r"shot", name) and "tail" not in name:
-                silenced = "silenced" in name
-                return ("gunshot silenced" if silenced else "gunshot", gun)
-            if "tail" in name:
-                return ("gun tail", gun)
-            return ("gun handling", gun)
-        if head == "shotguns":
-            return ("gunshot", p[1]) if "shot" in name else ("gun handling", p[1])
+        if head in ("firearms", "shotguns"):
+            return gun_part(path, name, p[1])
+        if head == "launchers":
+            return gun_part(path, name, "launcher")
+        if head in ("crossbow", "nonlethal"):
+            part = gun_part(path, name, head)
+            # Quiet shots: not gunfire to teach, not a false alarm to count.
+            return ("other weapon", head) if part[0] != "gun handling" else part
+        if head == "generic":
+            return ("gun handling", "generic")
         if head == "tails":
             return ("gun tail", p[1] if len(p) > 2 else "tails")
-        if head in ("launchers", "crossbow", "nonlethal"):
-            return ("other weapon", head)
-        if head in ("grenades", "landmine", "claymoremine", "plastic", "gasstationexplosion", "gascanisterexplosion", "generic"):
-            return ("explosion", head)
+        if head in ("grenades", "landmine", "claymoremine", "plastic", "gasstationexplosion", "gascanisterexplosion"):
+            # Pins, hiss and toys in the same folders are not blasts.
+            if re.search(r"explosion|detonation|flashbang|tail", name):
+                return ("explosion", head)
+            return ("player actions", head)
         if head in ("meleehits", "hits", "shells", "projectiles"):
             return ({"meleehits": "melee hit", "hits": "bullet hit", "shells": "shell case", "projectiles": "bullet flyby"}[head], p[1] if len(p) > 2 else head)
         return ("other weapon", head)

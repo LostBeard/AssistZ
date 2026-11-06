@@ -58,6 +58,29 @@ Across the non-gun sounds, 12.9% are called gunfire at -6 dB and 5.3% at -24, wi
 - Reported, no limit: how many sounds end up unnamed. Saying nothing is allowed, and it has a cost.
 Then the driven run doing what players do, and then TJ plays it.
 
+**Fitted (`Lab/open_data.py`, `Lab/open_fit.py`), read on validation kinds of sound only.** 24 classes from the game's folders plus the lab's recordings, 46,484 examples, L-BFGS, split by whole kind of sound and whole gun. At bar 0.3, -6 and -24 dB: false gunfire 0.6% and 0.9%, false gas strike 0.3% and 0.2%, false infected attack 0%, gunshots from guns never trained on (Bizon, CZ75, Izh43, colt1911, cz61, derringer, famas, mp5k, trumpet) 87.5% and 85.8%. Names on unseen kinds: footsteps 86%, voice 86%, animal 83%, birds 89%, door 75%, vehicle 59%, weather 41%, world object 36%. Weak spots: `gun tail` splits between gunfire and handling; silenced shots 74% and 60%; `other weapon` 43%.
+
+**Fixed before the test: a name is said only at probability 0.3 or more, and rare classes (gas strike, helicopter crash) at 0.5.** Below that the sound has no name. Scored once on the test kinds of sound and on ESC-50, then the lab's replays.
+
+**The written test, run once: FAILED two limits.** Thirteen guns never trained on, 7,524 clips, ESC-50 2,000 clips.
+
+| Limit | -6 dB | -24 dB |
+|---|---|---|
+| False gunfire, at most 1% | 0.95 pass | **1.36 fail** |
+| False gas strike, at most 1% | 0.01 pass | 0.03 pass |
+| False infected attack, at most 2% | 0 pass | 0 pass |
+| Gunshots of unseen guns, at least 85% and 70% | **72.6 fail** | 77.3 pass |
+| ESC-50 false gunfire, at most 2% | 1.95 pass | 2.00 pass |
+| ESC-50 false gas strike, at most 2% | 0.90 pass | 0.80 pass |
+
+ESC-50 sounds most called gunfire: fireworks 82%, a fair call. Thunderstorm 10% gunfire and 28% gas strike. Validation had read 87.5% on nine guns, and thirteen read 72.6%: nine guns were too few to trust.
+
+**Why, read from the test's own results, so those folders can no longer be a test.** My labels were wrong. 81 of the 90 false gunfire clips were "gun handling", and the file names show why: `AUG_tail_forest.ogg` and about 1,300 like it are the echoes of real shots, and my rule called anything without "shot" in its name handling. So the probe was taught that shots are handling, and then marked wrong for calling them shots. Also wrong: M79 launcher shots as player actions, fire mode clicks and smoke hiss as explosions. Rules now in `bank_lib.gun_part`, fixed from file names alone without looking at scores. Shots also go to `explosion`, mostly Izh18 and Scar at -6 dB, to look at next.
+
+**The new test, written before any new fit: real weapon mods from the Workshop, guns and sounds never in any fit.** The same limits for shots and false gunfire. Their guns' shots must be called gunfire at least 85% at -6 dB and 70% at -24 dB. This is the case TJ asked about. Tuning from here uses whole-gun folds on the guns that are not in the old test folders. The shipped probe trains on every gun.
+
+**Labels fixed, whole-gun folds (`Lab/open_cv.py`), not a test.** Each of 47 guns takes a turn as never trained on (43 of them have gunshot clips, 1,417 shots), false alarms from held-out kinds of sound. -6 and -24 dB: shots called gunfire 85.7% and 84.3%, false gunfire 0.46% and 0.36%, false gas strike 0.17%, false infected attack 0. Silenced shots 81% and 71%, echoes alone 62% and 64%. Shots missed go mostly to explosion (shotguns and heavy rifles) and to no name. Worst guns: PB6P9, mp133, Saiga12, R12, rossim92, SVD. All clean samples: real game mixes are next.
+
 "Essentially give you Cortana in DayZ": as helpful as ML can get using just the video and audio streams, and a test of SpawnDev.ILGPU.ML. She can't control you, fight for you or look around corners, but she is smart, helpful, tracks what matters and gives as much useful information as possible. In the browser, sleek and unobtrusive. An ML showcase, not an accessibility tool (TJ's direction, handoff).
 
 ## The goal, in TJ's words (2026-11-05)
