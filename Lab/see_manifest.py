@@ -37,16 +37,18 @@ for f, g in zip(files, game):
     e = env[int(np.argmin(np.abs(et - g)))]
     p = pose[int(np.argmin(np.abs(pg - g)))]
     near = float(e["infected_nearest"])
+    # The camera looks along yaw + aim: standing still, the head turns before the body (on a driven sweep, 330 px off the box with yaw alone, 14 px with both).
+    look = float(p["yaw"]) + float(p.get("aim_lr") or 0)
     rel = None
     if near >= 0 and float(e["infected_x"]) != 0:
-        rel = (math.degrees(math.atan2(float(e["infected_x"]) - float(p["x"]), float(e["infected_z"]) - float(p["z"]))) - float(p["yaw"]) + 180) % 360 - 180
+        rel = (math.degrees(math.atan2(float(e["infected_x"]) - float(p["x"]), float(e["infected_z"]) - float(p["z"]))) - look + 180) % 360 - 180
     # The placed infected itself, on runs that log it: the nearest of all can be a natural one (see1 had 11-13 about).
     placed_near, placed_rel, placed_state = "", "", ""
     placed_los = e.get("placed_los", "")
     if float(e.get("placed_x") or 0) != 0:
         dx, dz = float(e["placed_x"]) - float(p["x"]), float(e["placed_z"]) - float(p["z"])
         placed_near = round(math.hypot(dx, dz), 2)
-        placed_rel = round((math.degrees(math.atan2(dx, dz)) - float(p["yaw"]) + 180) % 360 - 180, 1)
+        placed_rel = round((math.degrees(math.atan2(dx, dz)) - look + 180) % 360 - 180, 1)
         placed_state = int(e["placed_state"])
     rows.append(dict(frame=os.path.basename(f), game=round(float(g), 2), near=near, state=int(e["infected_state"]), worst=int(e["infected_worst"]), rel=round(rel, 1) if rel is not None else "", count=int(e["infected"]), placed_near=placed_near, placed_rel=placed_rel, placed_state=placed_state, placed_los=placed_los))
 with open(os.path.join(frames_dir, "manifest.csv"), "w", newline="", encoding="utf-8") as fh:

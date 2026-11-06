@@ -1,5 +1,7 @@
 @page "/vision"
 @using AssistZ.Services
+@using global::ILGPU
+@using global::ILGPU.Runtime
 @using SpawnDev.ILGPU.ML
 @using SpawnDev.ILGPU.ML.Hub
 @using SpawnDev.ILGPU.ML.Pipelines
@@ -20,6 +22,10 @@
     [SupplyParameterFromQuery(Name = "tiles")] public int? Tiles { get; set; }
     [SupplyParameterFromQuery(Name = "zoom")] public int? Zoom { get; set; }
     [SupplyParameterFromQuery(Name = "capture")] public int? Capture { get; set; }
+    [SupplyParameterFromQuery(Name = "repo")] public string? Repo { get; set; }
+    [SupplyParameterFromQuery(Name = "onnx")] public string? OnnxFile { get; set; }
+    [SupplyParameterFromQuery(Name = "input")] public int? InputSize { get; set; }
+    [SupplyParameterFromQuery(Name = "person")] public int? PersonClass { get; set; }
     string _status = "ready";
 
     // Square tiles that leave out the HUD strip at the bottom of a 1600x900 frame. The hotbar's items differ between runs, so they must not reach the embedding.
@@ -95,6 +101,102 @@
         Console.WriteLine($"[AssistZ] yolo file={name} kind={kind} ms={ms:0.0} found={found}");
     }
 
+    // WORKAROUND, lab measurement only: the library has no pipeline for the DETR family yet, so this is its steps by hand. If one of these wins, ask Tuvok for a pipeline and remove this. Those models take a stretched square, no mean or std, and give sigmoid logits and normalised centre boxes, with no NMS.
+    async Task DetrAsync()
+    {
+        var acc = await Gpu.GetAcceleratorAsync();
+        var load = Stopwatch.StartNew();
+        int input = InputSize ?? 640;
+        using var source = new HubModelSource(JS, Http);
+        await using var stream = await source.OpenAsync(Repo ?? "onnx-community/dfine_n_coco-ONNX", OnnxFile ?? "onnx/model.onnx");
+        using var session = await InferenceSession.CreateFromStreamAsync(acc, stream, inputShapes: new Dictionary<string, int[]> { ["pixel_values"] = new[] { 1, 3, input, input } });
+        using var preprocess = new SpawnDev.ILGPU.ML.Kernels.ImagePreprocessKernel(acc);
+        var kernels = new ElementWiseKernels(acc);
+        var capture = Capture == 1 ? new SpawnDev.ILGPU.ML.Graph.SessionGraphCapture(session, acc) { KeepDrains = true } : null;
+        Console.WriteLine($"[AssistZ] yolo loaded in {load.ElapsedMilliseconds} ms on {acc.Name}; inputs {string.Join(",", session.InputNames)}; outputs {string.Join(",", session.OutputNames)}");
+        using var picker = JS.Call<string, HTMLInputElement>("document.getElementById", "az-frames");
+        using var files = picker.Files;
+        int n = files?.Length ?? 0;
+        for (int i = 0; i < n; i++)
+        {
+            using var file = files!.ElementAt(i);
+            string name = file.Name;
+            using var bitmap = await JS.CallAsync<File, ImageBitmap>("createImageBitmap", file);
+            int w = (int)bitmap.Width, h = (int)bitmap.Height;
+            using var canvas = new OffscreenCanvas(w, h);
+            using var ctx = canvas.Get2DContext(new CanvasRenderingContext2DSettings { WillReadFrequently = true });
+            ctx.DrawImage(bitmap, 0, 0);
+            await DetectDetrAsync(session, capture, acc, preprocess, kernels, input, ctx, name, "full", 0, 0, w, h);
+            if (Tiles == 1)
+                for (int t = 0; t < YoloLefts.Length; t++)
+                    await DetectDetrAsync(session, capture, acc, preprocess, kernels, input, ctx, name, $"tile{t}", YoloLefts[t], YoloTileTop, YoloTile, YoloTile);
+            bitmap.Close();
+            if (i % 50 == 0)
+            {
+                _status = $"{i + 1} of {n}";
+                StateHasChanged();
+                await Task.Yield();
+            }
+        }
+        Console.WriteLine($"[AssistZ] yolo capture: {capture?.CaptureStatus ?? "off"}");
+        Console.WriteLine($"[AssistZ] yolo done frames={n}");
+    }
+
+    async Task DetectDetrAsync(InferenceSession session, SpawnDev.ILGPU.ML.Graph.SessionGraphCapture? capture, Accelerator acc, SpawnDev.ILGPU.ML.Kernels.ImagePreprocessKernel preprocess, ElementWiseKernels kernels, int input, CanvasRenderingContext2D ctx, string name, string kind, int x, int y, int w, int h)
+    {
+        var clock = Stopwatch.StartNew();
+        using var image = ctx.GetImageData(x, y, w, h);
+        using var data = image.Data;
+        using var rgba = SpawnDev.ILGPU.ML.Preprocessing.RgbaUpload.FromTypedArray(acc, data, w, h);
+        using var pre = acc.Allocate1D<float>(3 * input * input);
+        preprocess.Forward(rgba.View, pre.View, w, h, input, input, mean: new[] { 0f, 0f, 0f }, std: new[] { 1f, 1f, 1f }, preserveAspect: false, padValue: 0f);
+        var feeds = new Dictionary<string, SpawnDev.ILGPU.ML.Tensors.Tensor> { [session.InputNames[0]] = new SpawnDev.ILGPU.ML.Tensors.Tensor(pre.View, new[] { 1, 3, input, input }) };
+        var outputs = capture != null ? await capture.RunAsync(feeds) : await session.RunAsync(feeds);
+        bool own = capture == null || !capture.LastRunReplayed;
+        float[] logits, boxes;
+        int queries, classes;
+        try
+        {
+            var l = outputs["logits"];
+            var b = outputs["pred_boxes"];
+            queries = l.Shape[1];
+            classes = l.Shape[2];
+            using var lr = acc.Allocate1D<float>(l.ElementCount);
+            using var br = acc.Allocate1D<float>(b.ElementCount);
+            kernels.Scale(l.Data.SubView(0, l.ElementCount), lr.View, l.ElementCount, 1f);
+            kernels.Scale(b.Data.SubView(0, b.ElementCount), br.View, b.ElementCount, 1f);
+            await acc.SynchronizeAsync();
+            logits = await lr.CopyToHostAsync<float>(0, l.ElementCount);
+            boxes = await br.CopyToHostAsync<float>(0, b.ElementCount);
+        }
+        finally
+        {
+            if (own)
+                session.ReturnOutputs(outputs);
+        }
+        int person = PersonClass ?? 0;
+        var found = new List<string>();
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        for (int q = 0; q < queries; q++)
+        {
+            int best = 0;
+            float top = float.MinValue;
+            for (int c = 0; c < classes; c++)
+                if (logits[q * classes + c] > top)
+                {
+                    top = logits[q * classes + c];
+                    best = c;
+                }
+            float score = 1f / (1f + MathF.Exp(-top));
+            if (score < 0.1f)
+                continue;
+            float cx = boxes[q * 4] * w, cy = boxes[q * 4 + 1] * h, bw = boxes[q * 4 + 2] * w, bh = boxes[q * 4 + 3] * h;
+            found.Add(string.Create(culture, $"{(best == person ? "person" : $"c{best}")}:{score:0.000}:{cx - bw / 2 + x:0}:{cy - bh / 2 + y:0}:{bw:0}:{bh:0}"));
+        }
+        double ms = clock.Elapsed.TotalMilliseconds;
+        Console.WriteLine($"[AssistZ] yolo file={name} kind={kind} ms={ms:0.0} found={string.Join(";", found)}");
+    }
+
     async Task ChosenAsync(ChangeEventArgs _)
     {
         try
@@ -102,6 +204,11 @@
             if (Model == "yolo")
             {
                 await YoloAsync();
+                return;
+            }
+            if (Model == "detr")
+            {
+                await DetrAsync();
                 return;
             }
             var acc = await Gpu.GetAcceleratorAsync();

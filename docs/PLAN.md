@@ -8,7 +8,7 @@ Other sources, in order: `../dayz_assistive_system_overview.md` (one folder abov
 
 The repo is public, with a fresh history and the app on GitHub Pages (`.github/workflows/deploy-to-github-pages.yml`, run by hand, so the page stays steady while work goes on: run it only for a build that has passed). The goal in the README is TJ's: demonstrating SpawnDev.ILGPU.ML on real time audio and video in the browser.
 - **Old commit hashes** in this plan, the lab record and `_TestStats` are in `D:\users\tj\Projects\AssistZ\AssistZ-history-20261106.bundle` on NV1080, 169 commits, not on GitHub. `git clone` it to read them. `Lab/flyby/gun_rain_compare.py` needs old revisions too.
-- **Before video ships in the app, check the licence.** The YOLOv8 weights come from Ultralytics, whose licence I understand to be AGPL-3.0, unlike this repo's MIT. Today only the lab page `/vision` loads them. Ask TJ, or use another detector.
+- **Replace YOLOv8 before video ships (TJ, 2026-11-06):** "If we can find non-GPL models to use that would be ideal. We'll research ... to make sure we are getting a modern model that fits our requirements." The YOLOv8 weights come from Ultralytics, whose licence I understand to be AGPL-3.0, unlike this repo's MIT. Today only the lab page `/vision` loads them. YOLOv8 stays as the lab's yardstick until something beats it. Requirements for a replacement: licence of both code and weights free of GPL and AGPL; modern; runs in the browser through SpawnDev.ILGPU.ML; at least as good as setup 4 on the same frames at 10-30 m; fits the 2 frames a second on the RX 590 beside the sound work. Research and results: "Detector research" below.
 - Never commit game samples, frames, `DayZ-Central-Economy` or `expansion_lab_settings` content: it would now be public at once.
 
 ## What this is
@@ -297,10 +297,50 @@ Checked by eye, and what is still open:
 
 **The first attempt stopped: the character swam (2026-11-06).** TJ saw it. Sprinting forward beats walking back, so the driver drifted up to 304 m, and see28, see30, see33 and the running see35 spent 47 to 69% of their time below 0.5 m height, in the sea. My checks only read run times and frame counts. Nothing from these runs has been scored. Decided before any score: see29, see31, see32 and see34 stayed dry (0%) and stand, though they drifted 147 to 304 m. see28, see30, see33 and see35 are out, and see36 never ran. Mode 34 now sends the player home on reaching water, or between slots if over 40 m away, logging `home` in `world.csv`. Re-recorded: see37, see38 dusk, see39 rain, see40, see41 noon. So the test is dusk see29, 37, 38; rain see31, 32, 39; noon see34, 40, 41. `Lab/moving_check.py` reports time in water, read before any scoring.
 
+**Setup 4's moving test (see29, 31, 32, 34, 37 to 41, ML 5.8.5, capture on, every frame): passes, except that rain has 10 slots where the limit says at least 12.** One more rain run decides it.
+| Limit | Dusk | Rain | Noon |
+|---|---|---|---|
+| Sees it: sighted within 5 s, 10-30 m, line of sight | 12/13 | 9/10 | 11/12 |
+| False at rest (limit 1 per 5 min) | 0 in 10.6 min | 0 in 10.6 min | 0 in 10.6 min |
+| False during slots (no limit, reported) | 3 in 23.8 min | 1 in 23.6 min | 4 in 23.7 min |
+| Bearing, median (limit 3 degrees) | 0.57 | 0.60 | 0.57 |
+| Distance, K fixed, within 25% (limit 75%) | 75.43% | 90% | 88% |
+
+The inventory rule, fresh: 661 of 661 held-open frames flagged, 0 flagged elsewhere (limit 90%). All nine runs stayed out of the water.
+
+Frames with a box at the infected, in view with line of sight, moving:
+| | 0-10 m | 10-20 m | 20-30 m | 30-50 m | 50-70 m |
+|---|---|---|---|---|---|
+| Dusk | 124/133 | 232/255 | 143/183 | 61/370 | 13/267 |
+| Rain | 69/81 | 274/293 | 147/162 | 35/298 | 4/236 |
+| Noon | 91/100 | 284/340 | 153/210 | 71/300 | 38/192 |
+
+- **The truth was wrong a third time, the detector looking worse than it was.** The camera looks along yaw + `aim_lr`: standing still, the head turns before the body. On sweeps the boxes were 330 px from a column predicted from yaw alone, 14 px with both, while other phases did not change (`Lab/aim_test.py`). Before this, the table read 7 false in slots at dusk, 5 in rain, 11 at noon, and rain at 10-20 m read 74%, not 94%. `Lab/see_manifest.py` now uses both; still-camera results did not change.
+- **What the remaining false sightings are, by eye** (`Lab/moving_verdict.py`, 13 tracks by a looser count, on all slots): a white road marker post boxed again and again (see41, see31), a gap in a tree, a dark bush on a hill, and two that are a real infected at arm's length. A moving camera lets a post past the movement rule, so a marker post by a road may blink up on the radar.
+- Dusk distance is a thin pass. K would fit better at about 1450 while moving, against 1268 still; not explained.
+- The YOLOv8 timing on see34 to see41 rose to 60-72 ms a tile because the reference runs below were using the CPU at the same time.
+
+### Detector research (2026-11-06): what replaces YOLOv8
+
+Requirements are under "Public" above. Licences checked at the source repositories and Hugging Face, not from summaries; the three candidates below were run on the same frames in ONNX Runtime on the CPU (`Lab/detr_ort.py`), since D-FINE-N does not run on ML yet. Comparison: see18, 21 and 24, whole frame plus three native tiles, person boxes at the infected.
+
+| Model | Licence | COCO AP, source's figure | Size, input | CPU, 4 threads | 10-30 m, bar 0.25 | False at rest, 11 min |
+|---|---|---|---|---|---|---|
+| YOLOv8n (yardstick) | AGPL-3.0 | | 12 MB, 640 | | 365/421 | 6 |
+| **D-FINE-N** | Apache-2.0 | 42.8 | 15 MB, 640 | 110 ms | 351/421 | 0 |
+| RF-DETR Nano | Apache-2.0 | 48.4 | 108 MB, 384 | 194 ms | 164/211 against YOLOv8n's 179/211, every 4th frame | 23 against 3 |
+| RT-DETRv2-R18 | Apache-2.0 | | 81 MB, 640 | 364 ms | still running | |
+
+- **D-FINE-N is the front runner:** nearly YOLOv8n's hits and fewer false boxes, at a similar size. Its confidences run lower: at bar 0.5 it finds almost nothing, so setup 4's bars do not carry over and need choosing again. Its boxes give a worse distance so far (62-68% within 25%, with K for YOLOv8), to be looked at with its own K. Both are for its own test, written first.
+- **RF-DETR Nano is out for now.** Best on COCO, but its 384 input loses infected by 20-30 m. Its larger Apache sizes are bigger still.
+- **DEIM** (Apache-2.0, 43.0 AP at N) is a training method on the same D-FINE network: worth trying if D-FINE-N wins, but it has no ready ONNX export. **DEIMv2** has its own licence, not read through yet, so not assumed free. RF-DETR's Atto to Pico and XL sizes are under Roboflow's PML 1.0, not free to self-host commercially. **YOLOX** is Apache-2.0 but older, and not yet tried. D-FINE's Objects365 weights have their own dataset terms, so COCO weights only.
+- **The block:** D-FINE-N fails on ML 5.8.5 on a shape error at node 417 (`Equal`, [3] against [4]). ONNX Runtime runs the same file, so it looks like ours. Asked Tuvok for the fix and a DETR pipeline: `_DevComms/2026-11-06-1135-Riker-TO-Tuvok-dfine-shape-failure.md`. No RX 590 GPU timing exists for it until then; its graph is 1,292 nodes against YOLOv8n's 261.
+
 **Next, in order:**
-1. That moving test. It takes the keyboard and mouse.
-2. Speed live beside the sound work.
-3. Other screens: map, loading, death, menus.
+1. One more rain run to complete the moving test.
+2. D-FINE-N on ML once Tuvok has the fix: speed on the RX 590 with capture, then its own limits on fresh runs.
+3. Speed live beside the sound work. It needs the chosen detector and capture on the live path.
+4. Other screens: map, loading, death, menus.
 
 The truth was wrong twice before these numbers, and both times the detector looked worse than it was. Checking boxes by eye found both. The nearest of all infected was not the placed one (fixed in the log). And the picture is a flat projection: the column is `800 + 840 tan(angle)` at 1600 wide, not 14.67 px per degree, and the view is about 87 degrees across (plus or minus 43.6), not the 109 once assumed. 8.8 px per degree at 960 holds at the centre, so small turns (`YawGate`, `YawTracker`) stand, but anything placing a box on the radar needs the tangent. The first look's tables above used the old line. `Lab/see_offset.py` shows the offsets slot by slot.
 

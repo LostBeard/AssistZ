@@ -5,7 +5,7 @@ Usage: python vision_detect.py <frames dir> <base url> <out json> <tiles 0|1> [e
 import asyncio, csv, json, os, sys, time, urllib.request
 import numpy as np
 import websockets
-PORT = 9333
+PORT = int(os.environ.get("VISION_PORT", "9333"))
 DIR, BASE, OUT, TILES = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 NTH = int(sys.argv[5]) if len(sys.argv) > 5 else 1
 
@@ -61,7 +61,8 @@ async def main():
     await call("Runtime.enable")
     await call("Page.enable")
     await call("DOM.enable")
-    await call("Page.navigate", url=f"{BASE}/vision?model=yolo&tiles={TILES}")
+    # TILES can also carry the rest of the query; a query naming its own model wins.
+    await call("Page.navigate", url=f"{BASE}/vision?tiles={TILES}" + ("" if "model=" in TILES else "&model=yolo"))
     for _ in range(240):
         await asyncio.sleep(0.5)
         r = await call("Runtime.evaluate", expression="!!document.getElementById('az-frames')", returnByValue=True)
