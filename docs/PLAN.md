@@ -342,10 +342,30 @@ This is a choice of what to test, not a result. It is three runs, on the CPU, se
 - **DEIM** (Apache-2.0, 43.0 AP at N) is a training method on the same D-FINE network: worth trying if D-FINE-N wins, but it has no ready ONNX export. **DEIMv2** has its own licence, not read through yet, so not assumed free. RF-DETR's Atto to Pico and XL sizes are under Roboflow's PML 1.0, not free to self-host commercially. **YOLOX** is Apache-2.0 but older, and not yet tried. D-FINE's Objects365 weights have their own dataset terms, so COCO weights only.
 - **The block: two ML shape bugs, on both D-FINE-N and RT-DETRv2.** ONNX Runtime runs both. First, the optimiser removes `x + 0` where the zero's shape [1,1,1,1] raises the rank: shown by turning the optimiser off (`?opt=0`), which gets past it. Second, past that, a batch of 33 appears by D-FINE-N's decoder layer 1, cause not found. Tuvok has both and a request for a DETR pipeline: `_DevComms/2026-11-06-1135-Riker-TO-Tuvok-dfine-shape-failure.md`. No RX 590 GPU timing exists for any of these until then. Graphs are 1,292 and 1,037 nodes against YOLOv8n's 261.
 
+### Live, beside the sound work (2026-11-06)
+
+`?see=1` runs the detector in the app on live frames beside the sound work and logs only: nothing reaches the radar. `AssistZ/Video/SightRules.cs` is setup 4 as tested code (18 new unit tests), `SightPass.cs` the live part. It uses YOLOv8n as a stand-in, on the hub at run time; it is a lab switch, not for shipping with those weights. On the RX 590, ML 5.8.5, capture on, Chrome on Windows 10, a real game window through the real share picker:
+
+| Live | Sound alone, gunfire | With video, gunfire | With video, driven player |
+|---|---|---|---|
+| Audio lost | 0 in 387 s | 0 in 462 s | 0 in 394 s |
+| Sounds named | 177/177 | 162/163 | 294/295 |
+| Name delay, median, p95 | 1.05 s, 1.24 | 1.10 s, 1.36 | 1.07 s, 1.32 |
+| Video passes | | 880 | 902 |
+| Time per pass, median, p90 | | 366, 449 ms | 408, 527 ms |
+| Passes a second, by median gap | | 1.88, interval 500 ms | **1.95**, interval 470 ms |
+
+- **The sound work is barely touched.** Name delay rises by about 0.05 s and no audio is lost. The max delay of 153 s on the driven run is one outlier from how `Lab/gap_score.py` pairs lines by azimuth text; not traced.
+- **Speed: 1.95 a second against a limit of 2, a thin miss as written.** Passes fit (408 ms median), and the rest is waiting for the interval and the next frame. Against 230 ms offline, a pass costs nearly twice as much live.
+- **Recording a capture plan must come before the live work.** Recording on the first live frame failed: `WebGPUExternalImageCopier.CopyToBuffer cannot run while a WebGPU dispatch plan is recording`, and the plan had 280 dispatches where the model has 250, so it had taken in other work. `SightPass` now records on a blank picture before the loops start: 250, live on all 880 and 902 passes. Reported to Tuvok, since only the copy throws, and other work is silently recorded.
+- **A shared window is not the game's picture:** 1602 x 938 with its title bar and borders, for a 1600 x 900 game. `SightPass` crops it, assuming a 1 px border and a 16:9 game. The title bar's height on other Windows versions, fullscreen and other shapes are untested beyond this. The lab's frames never showed this.
+- **Against the log, driven run** (`sniper_20261106_185628`, one run): bearing 0.76 degrees median, distance 80% within 25%, 3 sightings away from the infected during slots, 0 passes with a sighting in 2.6 minutes at rest, and the inventory flagged on 36 of 36 passes held open and none elsewhere. That needed a clock: the log's utc is whole seconds, and a wide search (`Lab/live_shift.py`, -70 to +70 s) gave one clear peak at -0.75 s; before it, 4.44 degrees.
+- **Open: only 2 of 4 slots sighted within 5 s live** (the others at 14 and 26 s), against 36 of 39 offline. Four slots from one run cannot say whether live is worse. A shared video stream may be softer than the lab's frames: not checked.
+
 **Next, in order:**
-1. Once Tuvok has the fixes: D-FINE-S's speed on the RX 590 with capture, then its own limits on fresh runs, still and moving, with its bars and K written first.
-2. Speed live beside the sound work: build the video path in the app behind a switch, using YOLOv8n as a stand-in so the plumbing does not wait. Lab switch only, not shipped with those weights.
-3. Other screens: map, loading, death, menus.
+1. Once Tuvok has the fixes: D-FINE-S's speed on the RX 590 with capture, then its own limits on fresh runs, still, moving and live, with its bars and K written first, and at least 12 live slots.
+2. Other screens: map, loading, death, menus.
+3. Video items 2 and 3 in the plan's order: which way the player is moving, then own shots.
 
 The truth was wrong twice before these numbers, and both times the detector looked worse than it was. Checking boxes by eye found both. The nearest of all infected was not the placed one (fixed in the log). And the picture is a flat projection: the column is `800 + 840 tan(angle)` at 1600 wide, not 14.67 px per degree, and the view is about 87 degrees across (plus or minus 43.6), not the 109 once assumed. 8.8 px per degree at 960 holds at the centre, so small turns (`YawGate`, `YawTracker`) stand, but anything placing a box on the radar needs the tangent. The first look's tables above used the old line. `Lab/see_offset.py` shows the offsets slot by slot.
 

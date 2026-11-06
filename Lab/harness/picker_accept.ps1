@@ -75,9 +75,15 @@ $tab = Find-All $picker 'Window' 'TabbedPaneTab' | Select-Object -First 1
 if (-not $tab) { "NO WINDOW TAB"; exit 1 }
 $tab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
 Start-Sleep -Milliseconds 800
-$sources = Find-All $picker $null 'DesktopMediaSourceView'
+# The list fills in over time: a game window was missing on the first look at least once.
+$source = $null
+$until = (Get-Date).AddSeconds(30)
+while (-not $source -and (Get-Date) -lt $until) {
+    $sources = Find-All $picker $null 'DesktopMediaSourceView'
+    $source = $sources | Where-Object { $_.Current.Name -match $Match } | Select-Object -First 1
+    if (-not $source) { Start-Sleep -Milliseconds 800 }
+}
 "sources: " + (($sources | ForEach-Object { $_.Current.Name }) -join ' | ')
-$source = $sources | Where-Object { $_.Current.Name -match $Match } | Select-Object -First 1
 if (-not $source) { "NO SOURCE MATCHES $Match"; exit 1 }
 "choosing '$($source.Current.Name)'"
 $source.SetFocus()

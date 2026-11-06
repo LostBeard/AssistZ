@@ -18,6 +18,7 @@
     <Compile Include="..\AssistZ\Audio\BurstVote.cs" Link="Under test\BurstVote.cs" />
     <Compile Include="..\AssistZ\Audio\DistanceProbe.cs" Link="Under test\DistanceProbe.cs" />
     <Compile Include="..\AssistZ\Video\YawGate.cs" Link="Under test\YawGate.cs" />
+    <Compile Include="..\AssistZ\Video\SightRules.cs" Link="Under test\SightRules.cs" />
     <Compile Include="..\AssistZ\Audio\AudioGapMeter.cs" Link="Under test\AudioGapMeter.cs" />
     <Compile Include="..\AssistZ\Audio\SoundMarks.cs" Link="Under test\SoundMarks.cs" />
     <Compile Include="..\AssistZ\Audio\GunProbe.cs" Link="Under test\GunProbe.cs" />

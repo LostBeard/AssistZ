@@ -82,6 +82,9 @@ namespace AssistZ.Services
         public bool LabLogging { get; set; }
         /// <summary>?memlog=1: log live WebGPU buffers and pool allocations per event, to split a memory climb between ILGPU's buffers and Chrome's.</summary>
         public bool MemLog { get; set; }
+        /// <summary>?see=1: the video detector beside the sound work, logged only, to measure whether it fits. Lab only for now: nothing reaches the radar.</summary>
+        public SightPass? Sight { get; set; }
+        Task? _sightRun;
         /// <summary>A gunfire word outnumbered by thunder in its burst takes thunder (on; ?yield=0 to compare). In dry storms false gunshots 8 -> 0, real gunfire in storms unchanged on fresh runs (97/103, 116/118).</summary>
         public bool GunfireYieldsToThunder { get; set; }
         /// <summary>Audio chunks the reader may queue before Chrome drops the oldest; about 5 s at 10 ms a chunk. On Chrome's default a live run lost about 2.1 s in 150 s, in stalls of up to 180 ms, mostly in the first minute; with this, none, and names came no later (docs/PLAN.md). Null = Chrome's default: ?audiobuf=0.</summary>
@@ -258,6 +261,7 @@ namespace AssistZ.Services
             _analyzer = new StereoAnalyzer(accelerator) { SpectralEnabled = SpectralEnabled };
             _video = new VideoPreview(accelerator, _js, previewCanvasId);
             _yaw = new YawTracker(accelerator) { LogBigShifts = LabLogging };
+            if (Sight != null) await Sight.LoadAsync();
             LastYaw = null;
             YawRatePixels = 0;
             YawRateDegrees = 0;
@@ -320,10 +324,12 @@ namespace AssistZ.Services
                 if (_videoLoop != null) await _videoLoop;
                 if (_audioLoop != null) await _audioLoop;
                 if (_labeling != null) await _labeling;
+                if (_sightRun != null) await _sightRun;
             }
             catch (OperationCanceledException) { }
             _videoLoop = _audioLoop = null;
             _labeling = null;
+            _sightRun = null;
             _toLabel.Clear();
             if (_videoTrack != null) _videoTrack.OnEnded -= OnTrackEnded;
             _videoTrack?.Dispose();
@@ -374,6 +380,8 @@ namespace AssistZ.Services
                         await _video!.ProcessAsync(frame);
                         Stats.RecordVideo(work.Elapsed.TotalMilliseconds, _video.SourceWidth, _video.SourceHeight);
                         await TrackYawAsync(frame.Timestamp / 1e6);
+                        if (Sight is { Due: true })
+                            _sightRun = Sight.StartAsync(frame);
                     }
                     finally
                     {

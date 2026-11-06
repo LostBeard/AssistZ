@@ -9,6 +9,7 @@
 @inject CaptureSession Session
 @inject OverlayWindow Overlay
 @inject GpuHost Gpu
+@inject HttpClient Http
 @implements IDisposable
 
 <PageTitle>AssistZ</PageTitle>
@@ -152,6 +153,7 @@
     [SupplyParameterFromQuery(Name = "probe")] public int? Probe { get; set; }
     [SupplyParameterFromQuery(Name = "replay")] public int? Replay { get; set; }
     [SupplyParameterFromQuery(Name = "skip")] public int? Skip { get; set; }
+    [SupplyParameterFromQuery(Name = "see")] public int? See { get; set; }
 
     SoundLabeler Labeler => Session.Labeler;
 
@@ -182,7 +184,11 @@
 
     const string PreviewCanvasId = "az-preview";
 
-    Task ShareAsync() => Session.StartDisplayAsync(PreviewCanvasId);
+    async Task ShareAsync()
+    {
+        if (See == 1 && Session.Sight == null) Session.Sight = new AssistZ.Video.SightPass(JS, Http, await Gpu.GetAcceleratorAsync());
+        await Session.StartDisplayAsync(PreviewCanvasId);
+    }
 
     void OpenFile()
     {
