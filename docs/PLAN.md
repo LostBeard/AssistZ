@@ -297,14 +297,16 @@ Checked by eye, and what is still open:
 
 **The first attempt stopped: the character swam (2026-11-06).** TJ saw it. Sprinting forward beats walking back, so the driver drifted up to 304 m, and see28, see30, see33 and the running see35 spent 47 to 69% of their time below 0.5 m height, in the sea. My checks only read run times and frame counts. Nothing from these runs has been scored. Decided before any score: see29, see31, see32 and see34 stayed dry (0%) and stand, though they drifted 147 to 304 m. see28, see30, see33 and see35 are out, and see36 never ran. Mode 34 now sends the player home on reaching water, or between slots if over 40 m away, logging `home` in `world.csv`. Re-recorded: see37, see38 dusk, see39 rain, see40, see41 noon. So the test is dusk see29, 37, 38; rain see31, 32, 39; noon see34, 40, 41. `Lab/moving_check.py` reports time in water, read before any scoring.
 
-**Setup 4's moving test (see29, 31, 32, 34, 37 to 41, ML 5.8.5, capture on, every frame): passes, except that rain has 10 slots where the limit says at least 12.** One more rain run decides it.
+**Setup 4's moving test (see29, 31, 32, 34, 37 to 42, ML 5.8.5, capture on, every frame): passed.** Rain needed a tenth run, see42, the first on the second Steam account, which played normally.
 | Limit | Dusk | Rain | Noon |
 |---|---|---|---|
-| Sees it: sighted within 5 s, 10-30 m, line of sight | 12/13 | 9/10 | 11/12 |
-| False at rest (limit 1 per 5 min) | 0 in 10.6 min | 0 in 10.6 min | 0 in 10.6 min |
-| False during slots (no limit, reported) | 3 in 23.8 min | 1 in 23.6 min | 4 in 23.7 min |
-| Bearing, median (limit 3 degrees) | 0.57 | 0.60 | 0.57 |
-| Distance, K fixed, within 25% (limit 75%) | 75.43% | 90% | 88% |
+| Sees it: sighted within 5 s, 10-30 m, line of sight | 12/13 | 13/14 | 11/12 |
+| False at rest (limit 1 per 5 min) | 0 in 10.6 min | 0 in 14.1 min | 0 in 10.6 min |
+| False during slots (no limit, reported) | 3 in 23.8 min | 1 in 31.5 min | 4 in 23.7 min |
+| Bearing, median (limit 3 degrees) | 0.57 | 0.58 | 0.57 |
+| Distance, K fixed, within 25% (limit 75%) | 75.43% | 87% | 88% |
+
+So YOLOv8n with setup 4 has passed every written limit but speed live, still camera and moving. It is not going in the app: see the licence above. The result is the bar for its replacement.
 
 The inventory rule, fresh: 661 of 661 held-open frames flagged, 0 flagged elsewhere (limit 90%). All nine runs stayed out of the water.
 
@@ -312,7 +314,7 @@ Frames with a box at the infected, in view with line of sight, moving:
 | | 0-10 m | 10-20 m | 20-30 m | 30-50 m | 50-70 m |
 |---|---|---|---|---|---|
 | Dusk | 124/133 | 232/255 | 143/183 | 61/370 | 13/267 |
-| Rain | 69/81 | 274/293 | 147/162 | 35/298 | 4/236 |
+| Rain | 109/122 | 366/386 | 204/219 | 129/448 | 49/336 |
 | Noon | 91/100 | 284/340 | 153/210 | 71/300 | 38/192 |
 
 - **The truth was wrong a third time, the detector looking worse than it was.** The camera looks along yaw + `aim_lr`: standing still, the head turns before the body. On sweeps the boxes were 330 px from a column predicted from yaw alone, 14 px with both, while other phases did not change (`Lab/aim_test.py`). Before this, the table read 7 false in slots at dusk, 5 in rain, 11 at noon, and rain at 10-20 m read 74%, not 94%. `Lab/see_manifest.py` now uses both; still-camera results did not change.
@@ -329,18 +331,19 @@ Requirements are under "Public" above. Licences checked at the source repositori
 | YOLOv8n (yardstick) | AGPL-3.0 | | 12 MB, 640 | | 365/421 | 6 |
 | **D-FINE-N** | Apache-2.0 | 42.8 | 15 MB, 640 | 110 ms | 351/421 | 0 |
 | RF-DETR Nano | Apache-2.0 | 48.4 | 108 MB, 384 | 194 ms | 164/211 against YOLOv8n's 179/211, every 4th frame | 23 against 3 |
-| RT-DETRv2-R18 | Apache-2.0 | | 81 MB, 640 | 364 ms | still running | |
+| RT-DETRv2-R18 | Apache-2.0 | | 81 MB, 640 | 310-365 ms | 205/211 against 179/211, every 4th frame; 30-70 m 90/231 against 23/231 | 11 against 3 |
 
-- **D-FINE-N is the front runner:** nearly YOLOv8n's hits and fewer false boxes, at a similar size. Its confidences run lower: at bar 0.5 it finds almost nothing, so setup 4's bars do not carry over and need choosing again. Its boxes give a worse distance so far (62-68% within 25%, with K for YOLOv8), to be looked at with its own K. Both are for its own test, written first.
+- **RT-DETRv2-R18 sees furthest:** at bar 0.5, 187/211 inside 30 m, 34/127 at 30-50 m and 26/104 at 50-70 m, against YOLOv8n's 170/211, 1/127 and 1/104, with 4 false at rest against 0. At 0.6, 1 false. It costs about three times the CPU time, so it may not fit the RX 590: unknown until it runs on ML. It may also fit better on tiles only, or on a faster GPU.
+- **D-FINE-N is the smallest good one:** nearly YOLOv8n's hits and fewer false boxes, at a similar size. Its confidences run lower: at bar 0.5 it finds almost nothing, so setup 4's bars do not carry over and need choosing again. Its boxes give a worse distance so far (62-68% within 25%, with K for YOLOv8), to be looked at with its own K. Both are for its own test, written first.
 - **RF-DETR Nano is out for now.** Best on COCO, but its 384 input loses infected by 20-30 m. Its larger Apache sizes are bigger still.
 - **DEIM** (Apache-2.0, 43.0 AP at N) is a training method on the same D-FINE network: worth trying if D-FINE-N wins, but it has no ready ONNX export. **DEIMv2** has its own licence, not read through yet, so not assumed free. RF-DETR's Atto to Pico and XL sizes are under Roboflow's PML 1.0, not free to self-host commercially. **YOLOX** is Apache-2.0 but older, and not yet tried. D-FINE's Objects365 weights have their own dataset terms, so COCO weights only.
-- **The block:** D-FINE-N fails on ML 5.8.5 on a shape error at node 417 (`Equal`, [3] against [4]). ONNX Runtime runs the same file, so it looks like ours. Asked Tuvok for the fix and a DETR pipeline: `_DevComms/2026-11-06-1135-Riker-TO-Tuvok-dfine-shape-failure.md`. No RX 590 GPU timing exists for it until then; its graph is 1,292 nodes against YOLOv8n's 261.
+- **The block: two ML shape bugs, on both D-FINE-N and RT-DETRv2.** ONNX Runtime runs both. First, the optimiser removes `x + 0` where the zero's shape [1,1,1,1] raises the rank: shown by turning the optimiser off (`?opt=0`), which gets past it. Second, past that, a batch of 33 appears by D-FINE-N's decoder layer 1, cause not found. Tuvok has both and a request for a DETR pipeline: `_DevComms/2026-11-06-1135-Riker-TO-Tuvok-dfine-shape-failure.md`. No RX 590 GPU timing exists for any of these until then. Graphs are 1,292 and 1,037 nodes against YOLOv8n's 261.
+- D-FINE-S and D-FINE-M are being scored as the middle ground.
 
 **Next, in order:**
-1. One more rain run to complete the moving test.
-2. D-FINE-N on ML once Tuvok has the fix: speed on the RX 590 with capture, then its own limits on fresh runs.
-3. Speed live beside the sound work. It needs the chosen detector and capture on the live path.
-4. Other screens: map, loading, death, menus.
+1. Finish the reference runs and write down the choice. Once Tuvok has the fixes: speed on the RX 590 with capture, then the chosen detector's own limits on fresh runs, still and moving, with bars chosen first.
+2. Speed live beside the sound work: build the video path in the app behind a switch, using YOLOv8n as a stand-in so the plumbing does not wait. Lab switch only, not shipped with those weights.
+3. Other screens: map, loading, death, menus.
 
 The truth was wrong twice before these numbers, and both times the detector looked worse than it was. Checking boxes by eye found both. The nearest of all infected was not the placed one (fixed in the log). And the picture is a flat projection: the column is `800 + 840 tan(angle)` at 1600 wide, not 14.67 px per degree, and the view is about 87 degrees across (plus or minus 43.6), not the 109 once assumed. 8.8 px per degree at 960 holds at the centre, so small turns (`YawGate`, `YawTracker`) stand, but anything placing a box on the radar needs the tangent. The first look's tables above used the old line. `Lab/see_offset.py` shows the offsets slot by slot.
 

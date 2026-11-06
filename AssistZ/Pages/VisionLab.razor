@@ -26,6 +26,7 @@
     [SupplyParameterFromQuery(Name = "onnx")] public string? OnnxFile { get; set; }
     [SupplyParameterFromQuery(Name = "input")] public int? InputSize { get; set; }
     [SupplyParameterFromQuery(Name = "person")] public int? PersonClass { get; set; }
+    [SupplyParameterFromQuery(Name = "opt")] public int? Optimise { get; set; }
     string _status = "ready";
 
     // Square tiles that leave out the HUD strip at the bottom of a 1600x900 frame. The hotbar's items differ between runs, so they must not reach the embedding.
@@ -109,7 +110,7 @@
         int input = InputSize ?? 640;
         using var source = new HubModelSource(JS, Http);
         await using var stream = await source.OpenAsync(Repo ?? "onnx-community/dfine_n_coco-ONNX", OnnxFile ?? "onnx/model.onnx");
-        using var session = await InferenceSession.CreateFromStreamAsync(acc, stream, inputShapes: new Dictionary<string, int[]> { ["pixel_values"] = new[] { 1, 3, input, input } });
+        using var session = await InferenceSession.CreateFromStreamAsync(acc, stream, inputShapes: new Dictionary<string, int[]> { ["pixel_values"] = new[] { 1, 3, input, input } }, enableOptimization: Optimise != 0);
         using var preprocess = new SpawnDev.ILGPU.ML.Kernels.ImagePreprocessKernel(acc);
         var kernels = new ElementWiseKernels(acc);
         var capture = Capture == 1 ? new SpawnDev.ILGPU.ML.Graph.SessionGraphCapture(session, acc) { KeepDrains = true } : null;
