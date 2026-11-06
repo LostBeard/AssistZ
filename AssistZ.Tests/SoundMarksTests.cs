@@ -197,6 +197,19 @@ namespace AssistZ.Tests
         }
 
         [Fact]
+        public void AGuessIsMarkedAndGetsNoPlaceOnTheRadar()
+        {
+            Assert.Equal("Footsteps?", SoundMarks.Name("footsteps"));
+            Assert.Equal("Door?", SoundMarks.Name("door closing"));
+            Assert.Equal("Maybe infected", SoundMarks.Name("zombie groaning"));
+            Assert.False(SoundMarks.PingsOnRadar(SoundMarks.For("footsteps")!));
+            Assert.False(SoundMarks.PingsOnRadar(SoundMarks.For("zombie groaning")!));
+            Assert.True(SoundMarks.PingsOnRadar(SoundMarks.For("gunshot")!));
+            Assert.True(SoundMarks.PingsOnRadar(SoundMarks.For("infected attack")!));
+            Assert.Equal("Gunshot", SoundMarks.Name("gunshot"));
+        }
+
+        [Fact]
         public void OnlyTestedNames_ClaimToBeMeasured()
         {
             Assert.True(SoundMarks.For("gunshot")!.Measured);

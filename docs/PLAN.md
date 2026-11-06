@@ -11,7 +11,23 @@ The repo is public, with a fresh history and the app on GitHub Pages (`.github/w
 - **Replace YOLOv8 before video ships (TJ, 2026-11-06):** "If we can find non-GPL models to use that would be ideal. We'll research ... to make sure we are getting a modern model that fits our requirements." The YOLOv8 weights come from Ultralytics, whose licence I understand to be AGPL-3.0, unlike this repo's MIT. Today only the lab page `/vision` loads them. YOLOv8 stays as the lab's yardstick until something beats it. Requirements for a replacement: licence of both code and weights free of GPL and AGPL; modern; runs in the browser through SpawnDev.ILGPU.ML; at least as good as setup 4 on the same frames at 10-30 m; fits the 2 frames a second on the RX 590 beside the sound work. Research and results: "Detector research" below.
 - Never commit game samples, frames, `DayZ-Central-Economy` or `expansion_lab_settings` content: it would now be public at once.
 
-## What this is
+## First real play, TJ, 2026-11-06: it does not work yet
+
+TJ's words: "honestly it is absolutely amazing how many things it gets wrong. so many false positives that it would be useless if the player was not actually watching the game. walking it says is walking out in front of my in the soanr yet will say "you moving" in the list. swimming shows walking out in front (way out) jsut like walkign does. it thinks everything is gunshots. there are so many sounds in dayz and it is clueless about 90% of them and just get them wrong. beak a stick and it hinks that is also footsteps."
+
+**This outranks every lab figure below.** Those figures were real, but measured only on sounds the lab scripts: gunfire, infected, weather, walking. False alarm rates on those say almost nothing about a game with thousands of sounds. What the code shows:
+- **Far out in front:** an own sound below the own-sound bar (0.55) or off centre falls to CLAP's nearest word, usually "footsteps". It sits at centre, which the radar draws as straight ahead, and with no distance estimate the radar put it on the outer ring (`RadarHud.Marks`). So walking and swimming draw far ahead while other events say "You, moving".
+- **Everything is a gunshot:** the probe has 8 classes, and `other` is 1,130 examples, none of swimming, sticks, doors or most of the game. An unfamiliar loud sound goes to whichever class is nearest. There is no "I do not know".
+- **Clueless about 90%:** beyond those classes the names are 17 general words from CLAP, never tested. A stick is "footsteps" because no word is closer.
+
+**Done now:** a word that was never tested gets no place on the radar, and the list marks it with "?" (`SoundMarks.PingsOnRadar`, `Name`). This removes false places. It does not stop false gunshots.
+
+**The plan, in order. This comes before the video work:**
+1. **Open-set training from the game's own sound bank.** `Addons/sounds_*.pbo` hold the game's real samples: characters (feet by surface, swimming, rustling), environment, vehicles, AI, weapons. Read locally, as before, never committed or shipped; only fitted weights ship. Run them through the same CLAP embedding, and fit a far wider `other`, and more classes where a name would help a player. Gunfire stops being the nearest thing to every loud sound.
+2. **An "I do not know".** Below a bar, or far from everything trained, say nothing rather than a wrong word. The bars come from the open-set test.
+3. **A false alarm test on an open set,** written first: samples held out from training, by whole folder, so new kinds of sound and not just new takes. Gunshots per sound played, by folder, with a limit written first. Then a driven run doing what a player does: swim, walk on each surface, break sticks, open doors, eat, reload, use tools. The lab's gunfire tests must still pass.
+4. **TJ plays it again.** That is the test that counts. Nothing is called working until TJ says so.
+
 "Essentially give you Cortana in DayZ": as helpful as ML can get using just the video and audio streams, and a test of SpawnDev.ILGPU.ML. She can't control you, fight for you or look around corners, but she is smart, helpful, tracks what matters and gives as much useful information as possible. In the browser, sleek and unobtrusive. An ML showcase, not an accessibility tool (TJ's direction, handoff).
 
 ## The goal, in TJ's words (2026-11-05)

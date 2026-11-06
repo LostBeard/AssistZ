@@ -38,7 +38,7 @@
                 @if (ev.Label != null)
                 {
                     var mark = SoundMarks.For(ev.Label);
-                    <span class="hud-what @(mark != null ? "lvl-" + SoundMarks.LevelOf(mark, ev.DistanceMeters, ev.GunFamily).ToString().ToLowerInvariant() : "")" title="@F0(ev.LabelProbability * 100)% (CLAP's own word: @ev.ClapLabel)">@SoundMarks.NameWithGun(ev.Label, ev.GunName, ev.GunFamily)</span>
+                    <span class="hud-what @(mark != null ? "lvl-" + (SoundMarks.PingsOnRadar(mark) ? SoundMarks.LevelOf(mark, ev.DistanceMeters, ev.GunFamily) : ThreatLevel.Info).ToString().ToLowerInvariant() : "")" title="@F0(ev.LabelProbability * 100)% (CLAP's own word: @ev.ClapLabel)">@SoundMarks.NameWithGun(ev.Label, ev.GunName, ev.GunFamily)</span>
                 }
                 <span class="hud-dir">@Label(ev)</span>
                 <span class="hud-num">@Reading(ev)</span>
@@ -64,7 +64,7 @@
         {
             if (SoundMarks.IsAmbient(ev.Label)) continue;
             var mark = SoundMarks.For(ev.Label);
-            if (ev.Label != null && mark == null) continue;
+            if (ev.Label != null && (mark == null || !SoundMarks.PingsOnRadar(mark))) continue;
             // World-anchored: since the event the view turned by (now - then), so the sound is that much the other way.
             double turned = Session.ViewYawDegrees - ev.ViewYawAtEvent;
             double front = ev.CalibratedAzimuth - turned;

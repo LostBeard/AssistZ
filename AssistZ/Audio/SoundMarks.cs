@@ -16,7 +16,17 @@ namespace AssistZ.Audio
     public static class SoundMarks
     {
         /// <summary>What the list calls a sound: the mark's title where there is one, since a probe's word can be older than what was measured.</summary>
-        public static string Name(string label) => OwnNames.TryGetValue(label, out var own) ? own : For(label)?.Title ?? label;
+        public static string Name(string label)
+        {
+            if (OwnNames.TryGetValue(label, out var own)) return own;
+            var mark = For(label);
+            if (mark == null) return label;
+            // A word that was never tested says so.
+            return mark.Measured || mark.Title.StartsWith("Maybe") ? mark.Title : mark.Title + "?";
+        }
+
+        /// <summary>Only names tested against the game's logs get a place on the radar. TJ's first real play (2026-11-06): breaking a stick, swimming and walking showed as footsteps far out in front, from CLAP's closest word, a sound at centre, and no distance. The list still shows the guess, marked as one.</summary>
+        public static bool PingsOnRadar(SoundMark mark) => mark.Measured;
 
         static readonly Dictionary<string, SoundMark> ByLabel = new()
         {

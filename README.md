@@ -20,6 +20,8 @@ The goal is a tactical assistant that works from only what a player can see and 
 
 ## What it does today
 
+**It is an early demonstration, and in real play it gets a lot wrong.** It raises so many false alarms that you could not rely on it without also watching the game. It calls many sounds gunshots, and it has never heard most of the game's sounds. That is being worked on; see [docs/PLAN.md](docs/PLAN.md). The lab figures below were measured on sounds it was tested with, not on everything a real game throws at it.
+
 Share a game window with its audio, and AssistZ puts what it hears on a radar: an icon and threat level for each sound, where it came from, and how far away it was.
 
 - **Names sounds** with [CLAP](https://arxiv.org/abs/2211.06687) on your GPU, plus small probes trained on the game's sounds: gunfire, infected attacks, thunder, gas strikes, helicopter crashes and your own movement.
@@ -28,9 +30,9 @@ Share a game window with its audio, and AssistZ puts what it hears on a radar: a
 - **Tells an agitated infected from a calm one**, and tries not to ping your own footsteps and shots.
 - **Follows your view** from the video, so a sound stays where it was as you turn.
 
-### How well, measured
+### What the lab measured
 
-Each figure is from lab recordings the models never trained on, with the game's own log as the answer key.
+Each figure is from lab recordings the models never trained on, with the game's own log as the answer key. They only contain the sounds the lab plays, such as scripted gunfire and infected. **They say little about false alarms from the rest of the game.**
 
 | | Result |
 |---|---|
@@ -42,12 +44,13 @@ Each figure is from lab recordings the models never trained on, with the game's 
 | Gunfire in a heavy rain storm | 92 of 103 |
 | Delay from sound to name, live | About 1 second |
 
-Those figures are for one game, mostly on one map, on one AMD RX 590. Treat them as what this setup achieved, not as a promise elsewhere.
+Those figures are for one game, mostly on one map, on one AMD RX 590, in scripted scenes. They are not what a player will see.
 
 ### What it cannot do yet
 
 - **Front or back.** Stereo audio cannot tell them apart while you stand still. Turning helps, and only for a repeating sound.
 - **Video does not reach the radar yet.** In the lab, YOLOv8 spots calm infected, which make too little sound to find, within about 30 m: sighted in 38 of 39 slots across dusk, rain and noon, with no false sightings in 34 minutes of empty frames, at about 230 ms a frame on the RX 590. That was with a still camera. It is being tested on a moving player now, and has not been measured beside the sound work. It sees nothing useful at night yet.
+- **Most of the game's sounds.** It knows 8 kinds of sound from training, and guesses the rest with a general model. Swimming, a breaking stick and many others come out wrong.
 - **Other games.** The probes were trained on DayZ.
 
 The plan and every result, including what failed, are in [docs/PLAN.md](docs/PLAN.md).
