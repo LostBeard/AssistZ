@@ -324,24 +324,26 @@ Frames with a box at the infected, in view with line of sight, moving:
 
 ### Detector research (2026-11-06): what replaces YOLOv8
 
-Requirements are under "Public" above. Licences checked at the source repositories and Hugging Face, not from summaries; the three candidates below were run on the same frames in ONNX Runtime on the CPU (`Lab/detr_ort.py`), since D-FINE-N does not run on ML yet. Comparison: see18, 21 and 24, whole frame plus three native tiles, person boxes at the infected.
+Requirements are under "Public" above. Licences were checked at the source repositories and Hugging Face. Each candidate ran in ONNX Runtime on the CPU with 4 threads (`Lab/detr_ort.py`), since none runs on ML yet, on the same every 4th frame of see18, 21 and 24 (dusk, rain, noon, still camera), whole frame plus three native tiles, against YOLOv8n's results on those frames. Same bar for each file, no movement rule.
 
-| Model | Licence | COCO AP, source's figure | Size, input | CPU, 4 threads | 10-30 m, bar 0.25 | False at rest, 11 min |
-|---|---|---|---|---|---|---|
-| YOLOv8n (yardstick) | AGPL-3.0 | | 12 MB, 640 | | 365/421 | 6 |
-| **D-FINE-N** | Apache-2.0 | 42.8 | 15 MB, 640 | 110 ms | 351/421 | 0 |
-| RF-DETR Nano | Apache-2.0 | 48.4 | 108 MB, 384 | 194 ms | 164/211 against YOLOv8n's 179/211, every 4th frame | 23 against 3 |
-| RT-DETRv2-R18 | Apache-2.0 | | 81 MB, 640 | 310-365 ms | 205/211 against 179/211, every 4th frame; 30-70 m 90/231 against 23/231 | 11 against 3 |
+| Model, bar 0.5 | Licence | COCO AP, source's figure | Size, input | CPU ms | 10-30 m | 30-50 m | 50-70 m | False: rest, 11 min; slots, 24 min |
+|---|---|---|---|---|---|---|---|---|
+| YOLOv8n (yardstick) | AGPL-3.0 | | 12 MB, 640 | | 170/211 | 1/127 | 1/104 | 0; 0 |
+| **D-FINE-S** | Apache-2.0 | 48.5 | 41 MB, 640 | 216 | **190/211** | **16/127** | **6/104** | **0; 0** |
+| D-FINE-N, at 0.25 | Apache-2.0 | 42.8 | 15 MB, 640 | 110 | 170/211 | 8/127 | 1/104 | 0; 0 |
+| D-FINE-M | Apache-2.0 | 52.3 | 75 MB, 640 | 387 | 192/211 | 39/127 | 17/104 | 8; 15 |
+| RT-DETRv2-R18 | Apache-2.0 | | 81 MB, 640 | 310-365 | 187/211 | 34/127 | 26/104 | 4; 10 |
+| RF-DETR Nano | Apache-2.0 | 48.4 | 108 MB, 384 | 194 | 99/211 | 0/127 | 0/104 | 5; 14 |
 
-- **RT-DETRv2-R18 sees furthest:** at bar 0.5, 187/211 inside 30 m, 34/127 at 30-50 m and 26/104 at 50-70 m, against YOLOv8n's 170/211, 1/127 and 1/104, with 4 false at rest against 0. At 0.6, 1 false. It costs about three times the CPU time, so it may not fit the RX 590: unknown until it runs on ML. It may also fit better on tiles only, or on a faster GPU.
-- **D-FINE-N is the smallest good one:** nearly YOLOv8n's hits and fewer false boxes, at a similar size. Its confidences run lower: at bar 0.5 it finds almost nothing, so setup 4's bars do not carry over and need choosing again. Its boxes give a worse distance so far (62-68% within 25%, with K for YOLOv8), to be looked at with its own K. Both are for its own test, written first.
-- **RF-DETR Nano is out for now.** Best on COCO, but its 384 input loses infected by 20-30 m. Its larger Apache sizes are bigger still.
+**The choice: D-FINE-S, with D-FINE-N the fallback if the RX 590 cannot carry it.** D-FINE-S beats YOLOv8n at every range on these frames, with no false sightings even before the movement rule, and is modern, Apache-2.0 and small enough. At bar 0.35 it reaches further (196/211, 36/127, 18/104) with 2 false at rest and 6 in slots, so the movement rule might let a lower bar pay; that is for its test. Larger models were not better here: D-FINE-M and RT-DETRv2 reach further but false-alarm more, at 1.5 to 2 times the cost. RF-DETR Nano's 384 input loses infected by 20-30 m.
+
+This is a choice of what to test, not a result. It is three runs, on the CPU, seen while choosing. Open: speed on the RX 590 (D-FINE-S's CPU time is twice D-FINE-N's and 25 GFLOPs against YOLOv8n's 8.7, my figure for YOLOv8n from memory); that its distance is weaker so far, 69% within 25% at K 1268, with K about 1187 fitting better; and moving, inventory, and other screens.
+
 - **DEIM** (Apache-2.0, 43.0 AP at N) is a training method on the same D-FINE network: worth trying if D-FINE-N wins, but it has no ready ONNX export. **DEIMv2** has its own licence, not read through yet, so not assumed free. RF-DETR's Atto to Pico and XL sizes are under Roboflow's PML 1.0, not free to self-host commercially. **YOLOX** is Apache-2.0 but older, and not yet tried. D-FINE's Objects365 weights have their own dataset terms, so COCO weights only.
 - **The block: two ML shape bugs, on both D-FINE-N and RT-DETRv2.** ONNX Runtime runs both. First, the optimiser removes `x + 0` where the zero's shape [1,1,1,1] raises the rank: shown by turning the optimiser off (`?opt=0`), which gets past it. Second, past that, a batch of 33 appears by D-FINE-N's decoder layer 1, cause not found. Tuvok has both and a request for a DETR pipeline: `_DevComms/2026-11-06-1135-Riker-TO-Tuvok-dfine-shape-failure.md`. No RX 590 GPU timing exists for any of these until then. Graphs are 1,292 and 1,037 nodes against YOLOv8n's 261.
-- D-FINE-S and D-FINE-M are being scored as the middle ground.
 
 **Next, in order:**
-1. Finish the reference runs and write down the choice. Once Tuvok has the fixes: speed on the RX 590 with capture, then the chosen detector's own limits on fresh runs, still and moving, with bars chosen first.
+1. Once Tuvok has the fixes: D-FINE-S's speed on the RX 590 with capture, then its own limits on fresh runs, still and moving, with its bars and K written first.
 2. Speed live beside the sound work: build the video path in the app behind a switch, using YOLOv8n as a stand-in so the plumbing does not wait. Lab switch only, not shipped with those weights.
 3. Other screens: map, loading, death, menus.
 
