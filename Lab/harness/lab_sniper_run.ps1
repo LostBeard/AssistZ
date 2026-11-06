@@ -1,7 +1,7 @@
 # Unattended crack-to-report run: DayZ lab mode 4 (server-fired SVD at 50/100/200/400 m, per range 2 near misses at
 # 2 m from the head and 2 wide misses at 25 m: the close-only bullet noise is a "being shot at" cue), the
 # PC's audio recorded by WASAPI loopback (no browser, no picker), then analyze_shots.py. Ask every GPU peer first.
-param([int]$RecordSeconds = 90, [switch]$RealShooter, [switch]$Expansion, [switch]$WideMiss, [switch]$LabelSet, [switch]$EngageTest, [switch]$Footsteps, [switch]$WorldEvents, [switch]$WeatherLab, [switch]$DirectionTest, [switch]$DistanceTest, [switch]$FarTest, [switch]$InfectedStates, [switch]$CalmInfected, [switch]$OwnSounds, [switch]$NewWeapons, [switch]$SeeInfected, [ValidateSet(0, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26, 27)][int]$StormLab = 0, [int]$PlayerWaitSeconds = 240, [ValidateSet("chernarusplus", "nasdara")][string]$Map = "chernarusplus", [ValidateSet(0, 1, 2, 3)][int]$Weather = 0, [string]$FrameDir = "", [double]$FramesPerSecond = 2, [int]$MapStartX = 0, [int]$Hour = -1)
+param([int]$RecordSeconds = 90, [switch]$RealShooter, [switch]$Expansion, [switch]$WideMiss, [switch]$LabelSet, [switch]$EngageTest, [switch]$Footsteps, [switch]$WorldEvents, [switch]$WeatherLab, [switch]$DirectionTest, [switch]$DistanceTest, [switch]$FarTest, [switch]$InfectedStates, [switch]$CalmInfected, [switch]$OwnSounds, [switch]$NewWeapons, [switch]$SeeInfected, [ValidateSet(0, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26, 27)][int]$StormLab = 0, [int]$PlayerWaitSeconds = 240, [ValidateSet("chernarusplus", "nasdara")][string]$Map = "chernarusplus", [ValidateSet(0, 1, 2, 3)][int]$Weather = 0, [string]$FrameDir = "", [double]$FramesPerSecond = 2, [int]$MapStartX = 0, [int]$Hour = -1, [int]$DieAt = 0)
 # -MapStartX resumes a map survey from that column.
 # -Weather 1|2|3 = weather over any mode: storm in heavy rain, dry storm, heavy rain with no storm. So -LabelSet is labelled gunfire in that weather.
 # -Map nasdara: the held-out map. Modes that use their own spawn work there (12-18, 21); the survey lists (19, 20, 22, 23) are Chernarus coordinates.
@@ -30,7 +30,7 @@ New-Item -ItemType Directory -Force $out | Out-Null
 
 if ($WideMiss -or $LabelSet -or $EngageTest -or $Footsteps -or $DirectionTest -or $DistanceTest) { $Expansion = $true }
 $mode = if ($SeeInfected) { 34 } elseif ($NewWeapons) { 33 } elseif ($OwnSounds) { 32 } elseif ($CalmInfected) { 31 } elseif ($InfectedStates) { 30 } elseif ($FarTest) { 29 } elseif ($DistanceTest) { 28 } elseif ($DirectionTest) { 25 } elseif ($StormLab -ne 0) { $StormLab } elseif ($WeatherLab) { 12 } elseif ($WorldEvents) { 11 } elseif ($Footsteps) { 10 } elseif ($EngageTest) { 9 } elseif ($LabelSet) { 8 } elseif ($WideMiss) { 7 } elseif ($Expansion) { 6 } elseif ($RealShooter) { 5 } else { 4 }
-& "$Tools\make_lab_missions.ps1" -Maps $Map -Mode $mode -Weather $Weather -MapStartX $MapStartX -Hour $Hour
+& "$Tools\make_lab_missions.ps1" -Maps $Map -Mode $mode -Weather $Weather -MapStartX $MapStartX -Hour $Hour -DieAt $DieAt
 python "$Tools\mod\build_mod.py" "$Lab\mods"
 # The player is present only when a pose log CREATED BY THIS LAUNCH has rows: the previous run's log is still
 # "recent" and once made a run start (and turn the view) while the client was still loading.

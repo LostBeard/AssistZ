@@ -362,10 +362,25 @@ This is a choice of what to test, not a result. It is three runs, on the CPU, se
 - **Against the log, driven run** (`sniper_20261106_185628`, one run): bearing 0.76 degrees median, distance 80% within 25%, 3 sightings away from the infected during slots, 0 passes with a sighting in 2.6 minutes at rest, and the inventory flagged on 36 of 36 passes held open and none elsewhere. That needed a clock: the log's utc is whole seconds, and a wide search (`Lab/live_shift.py`, -70 to +70 s) gave one clear peak at -0.75 s; before it, 4.44 degrees.
 - **Open: only 2 of 4 slots sighted within 5 s live** (the others at 14 and 26 s), against 36 of 39 offline. Four slots from one run cannot say whether live is worse. A shared video stream may be softer than the lab's frames: not checked.
 
+### Other screens, one noon run (see43, `vision_sniper_20261106_194240`, YOLOv8n, setup 4)
+
+`drive_own.py ... screens` opens each in turn; `-DieAt` gives a map and kills the character.
+
+| Screen | Frames | With a person box | Sightings |
+|---|---|---|---|
+| Pause menu | 123 | 121: the Z in the DayZ logo, at 0.80 | 0 |
+| Inventory | 124 | 124 | 0: 123 flagged by the rule |
+| Death ("You are dead") | 166 | 0 | 0 |
+| Game view, all other phases | | | none away from the infected |
+
+- **The movement rule stops the logo:** it never moves. So a detector that needed no movement rule would still need something for this. A menu's fixed art over a moving background has not been seen to fool it.
+- **Not tested.** The map: `M` did not open it, and a player needs it in hand; those frames were just the game view. The loading screen: YOLOv8n boxed a figure on it at 0.88 on an earlier run, and it comes before the driver starts. Other menus, such as gestures and crafting, and other interface scales.
+- **The crawl key is still wrong.** With X (scan 0x2D) a "crawl" moved at 3.0 to 3.5 m/s, a jog, as it did with Z, with one reading of 7.1. So it has not gone prone. Crawling is still untested.
+
 **Next, in order:**
 1. Once Tuvok has the fixes: D-FINE-S's speed on the RX 590 with capture, then its own limits on fresh runs, still, moving and live, with its bars and K written first, and at least 12 live slots.
-2. Other screens: map, loading, death, menus.
-3. Video items 2 and 3 in the plan's order: which way the player is moving, then own shots.
+2. Video items 2 and 3 in the plan's order: which way the player is moving, then own shots.
+3. The map and the loading screen, and the crawl key.
 
 The truth was wrong twice before these numbers, and both times the detector looked worse than it was. Checking boxes by eye found both. The nearest of all infected was not the placed one (fixed in the log). And the picture is a flat projection: the column is `800 + 840 tan(angle)` at 1600 wide, not 14.67 px per degree, and the view is about 87 degrees across (plus or minus 43.6), not the 109 once assumed. 8.8 px per degree at 960 holds at the centre, so small turns (`YawGate`, `YawTracker`) stand, but anything placing a box on the radar needs the tangent. The first look's tables above used the old line. `Lab/see_offset.py` shows the offsets slot by slot.
 

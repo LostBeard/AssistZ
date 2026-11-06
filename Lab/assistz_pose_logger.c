@@ -30,6 +30,8 @@
 	static const int AZ_LAB_WEATHER = AZ_LAB_WEATHER_VALUE;
 	// Mode 34: the hour to set, -1 leaves the mission's own time and weather.
 	static const int AZ_LAB_HOUR = AZ_LAB_HOUR_VALUE;
+	// Mode 34, -Screens: a map to open, and the character dies at this many seconds after the warmup, for the death screen. 0 = off.
+	static const int AZ_LAB_DIE_AT = AZ_LAB_DIE_AT_VALUE;
 	protected float m_AzOverlayClock;
 	protected bool m_AzOverlayDone;
 
@@ -780,6 +782,8 @@
 	static const float AZ_SEE_REST = 20.0;
 	protected bool m_AzSeeLit;
 	protected vector m_AzSeeHome;
+	protected float m_AzSeeClock;
+	protected bool m_AzSeeDead;
 
 	protected float AzSeeDistance(int slot)
 	{
@@ -813,7 +817,20 @@
 			}
 			AzWorldLog("hour", AZ_LAB_HOUR, at);
 			m_AzSeeHome = at;
+			if (AZ_LAB_DIE_AT > 0)
+				player.GetInventory().CreateInInventory("ChernarusMap");
 		}
+		m_AzSeeClock += dt;
+		if (AZ_LAB_DIE_AT > 0 && !m_AzSeeDead && m_AzSeeClock >= AZ_LAB_DIE_AT)
+		{
+			m_AzSeeDead = true;
+			player.SetAllowDamage(true);
+			player.SetHealth("", "", 0);
+			AzWorldLog("die", 0, at);
+			return;
+		}
+		if (m_AzSeeDead)
+			return;
 		// A driven player drifts: sprinting forward beats walking back. Runs went up to 300 m and several into the sea (TJ saw one swimming, 2026-11-06). Back home on water at once, or between slots if far off.
 		bool azInWater = GetGame().SurfaceIsSea(at[0], at[2]) || GetGame().SurfaceIsPond(at[0], at[2]);
 		if (azInWater || (!m_AzStatesOut && vector.Distance(at, m_AzSeeHome) > 40.0))

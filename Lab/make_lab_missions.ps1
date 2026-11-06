@@ -11,13 +11,15 @@ param(
     # A map survey resumes from this column (x in metres).
     [int]$MapStartX = 0,
     # Mode 34: the hour of day to set (with clear weather unless -Weather says otherwise); -1 leaves the mission's own.
-    [int]$Hour = -1
+    [int]$Hour = -1,
+    # Mode 34: a map to open, and the character dies this many seconds in, for the death screen. 0 = off.
+    [int]$DieAt = 0
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lab_paths.ps1")
 $missionRoot = Get-LabMissionRoot $LabRoot
 $source = Join-Path $LabRoot "DayZ-Central-Economy"
-$logger = (Get-Content (Join-Path $PSScriptRoot "assistz_pose_logger.c") -Raw).Replace("AZ_LAB_MODE_VALUE", "$Mode").Replace("AZ_LAB_WEATHER_VALUE", "$Weather").Replace("AZ_MAP_START_X_VALUE", "$MapStartX").Replace("AZ_LAB_HOUR_VALUE", "$Hour")
+$logger = (Get-Content (Join-Path $PSScriptRoot "assistz_pose_logger.c") -Raw).Replace("AZ_LAB_MODE_VALUE", "$Mode").Replace("AZ_LAB_WEATHER_VALUE", "$Weather").Replace("AZ_MAP_START_X_VALUE", "$MapStartX").Replace("AZ_LAB_HOUR_VALUE", "$Hour").Replace("AZ_LAB_DIE_AT_VALUE", "$DieAt")
 if (-not (Test-Path $source)) { throw "Clone https://github.com/BohemiaInteractive/DayZ-Central-Economy into $source first." }
 
 foreach ($map in $Maps) {

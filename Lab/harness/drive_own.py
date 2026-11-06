@@ -2,6 +2,7 @@
 Drives the lab character so it makes its own sounds, with nobody at the keyboard (lab mode 32): stands, walks, jogs, sprints, crouches, crawls, jumps, fires. Every phase's UTC is logged. Safety: before every step the foreground window must belong to the DayZ client PID recorded by launch_dayzdiag.ps1; otherwise it lets go of every key and stops.
 Usage: python drive_own.py <dayzdiag.pids.json> <out.json>                (lab mode 32: own sounds)
        python drive_own.py <dayzdiag.pids.json> <out.json> see <seconds>  (lab mode 34: keeps moving and sweeping the view while frames are saved, for video on a moving player)
+       python drive_own.py <dayzdiag.pids.json> <out.json> screens <seconds>  (lab mode 34 with -DieAt: opens the pause menu, the map and the inventory, goes prone and crawls: what does video make of them?)
 """
 import atexit, ctypes, ctypes.wintypes as wt, datetime, json, sys, time
 
@@ -30,7 +31,7 @@ class INPUT(ctypes.Structure):
 
 KEYUP, SCANCODE = 0x0002, 0x0008
 # Scan codes: the game reads these, not virtual keys.
-W, S, SHIFT, CTRL, C, X, V, TAB = 0x11, 0x1F, 0x2A, 0x1D, 0x2E, 0x2D, 0x2F, 0x0F
+W, S, SHIFT, CTRL, C, X, V, TAB, ESC, M = 0x11, 0x1F, 0x2A, 0x1D, 0x2E, 0x2D, 0x2F, 0x0F, 0x01, 0x32
 held = set()
 mouse_held = set()
 LEFT, RIGHT = (0x0002, 0x0004), (0x0008, 0x0010)
@@ -191,6 +192,40 @@ def sweep(name, seconds, counts_per_second, keys=(), reverse_each=0):
     log["phases"].append(seg)
     json.dump(log, open(out_path, "w"), indent=1)
 
+
+def toggle(name, scan, seconds, close=None):
+    """Opens a screen with a key, holds it, and closes it."""
+    seg = {"name": name, "start_utc": utc()}
+    key(scan, True); time.sleep(0.1); key(scan, False)
+    wait(seconds)
+    seg["end_utc"] = utc(); log["phases"].append(seg)
+    closer = close if close is not None else scan
+    key(closer, True); time.sleep(0.1); key(closer, False)
+    wait(1.5)
+    json.dump(log, open(out_path, "w"), indent=1)
+
+
+if len(sys.argv) > 3 and sys.argv[3] == "screens":
+    until = time.time() + float(sys.argv[4])
+    while time.time() < until:
+        phase("still", 12)
+        toggle("pause_menu", ESC, 8)
+        phase("still", 6)
+        toggle("map", M, 8)
+        phase("still", 6)
+        toggle("inventory", TAB, 8)
+        phase("still", 6)
+        seg = {"name": "prone_down", "start_utc": utc()}
+        key(X, True); time.sleep(0.1); key(X, False)
+        wait(3)
+        seg["end_utc"] = utc(); log["phases"].append(seg)
+        phase("crawl", 12, (W,), reverse_each=6)
+        key(X, True); time.sleep(0.1); key(X, False)
+        wait(3)
+    let_go()
+    json.dump(log, open(out_path, "w"), indent=1)
+    print(f"done: {len(log['phases'])} phases -> {out_path}")
+    sys.exit(0)
 
 if len(sys.argv) > 3 and sys.argv[3] == "see":
     until = time.time() + float(sys.argv[4])
